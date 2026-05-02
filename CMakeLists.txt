@@ -1,4 +1,8 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.10.2)
+
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
 
 project(testbridge-lab VERSION 0.1.0 LANGUAGES CXX)
 
@@ -17,14 +21,14 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 if(WIN32)
-    add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0A00)
+    add_definitions(-DNOMINMAX -D_CRT_SECURE_NO_WARNINGS -D_WIN32_WINNT=0x0A00)
     if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
     endif()
 endif()
 
 set(APP_VERSION_FULL "0.1.0-lab" CACHE STRING "Application version exposed by TestBridge")
-add_compile_definitions(APP_VERSION_FULL="${APP_VERSION_FULL}")
+add_definitions(-DAPP_VERSION_FULL="${APP_VERSION_FULL}")
 
 find_package(Qt5 5.15 REQUIRED COMPONENTS
     Core Gui Qml Quick QuickControls2 Network OpenGL Test WebSockets
@@ -47,7 +51,11 @@ endif()
 add_subdirectory(src/app)
 
 if(BUILD_TESTING AND ENABLE_TESTBRIDGE)
-    find_package(Python3 COMPONENTS Interpreter)
+    if(CMAKE_VERSION VERSION_LESS 3.12)
+        find_package(PythonInterp)
+    else()
+        find_package(Python3 COMPONENTS Interpreter)
+    endif()
     set(TESTBRIDGE_PYTHON "" CACHE FILEPATH "Python interpreter used to run TestBridge tests")
     if(NOT TESTBRIDGE_PYTHON)
         set(_TESTBRIDGE_VENV_PYTHON "${CMAKE_SOURCE_DIR}/tools/testbridge-mcp/.venv/Scripts/python.exe")
@@ -55,6 +63,8 @@ if(BUILD_TESTING AND ENABLE_TESTBRIDGE)
             set(TESTBRIDGE_PYTHON "${_TESTBRIDGE_VENV_PYTHON}")
         elseif(Python3_Interpreter_FOUND)
             set(TESTBRIDGE_PYTHON "${Python3_EXECUTABLE}")
+        elseif(PYTHONINTERP_FOUND)
+            set(TESTBRIDGE_PYTHON "${PYTHON_EXECUTABLE}")
         endif()
     endif()
 

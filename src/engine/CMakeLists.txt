@@ -258,7 +258,7 @@ set(ENGINE_MESHOPTIMIZER_TARGET "")
 if(TARGET meshoptimizer)
     set(ENGINE_MESHOPTIMIZER_TARGET meshoptimizer)
 else()
-    file(GLOB ENGINE_MESHOPTIMIZER_SOURCES CONFIGURE_DEPENDS
+    file(GLOB ENGINE_MESHOPTIMIZER_SOURCES
         ${CMAKE_SOURCE_DIR}/external/bgfx.cmake/bgfx/3rdparty/meshoptimizer/src/*.cpp
         ${CMAKE_SOURCE_DIR}/external/bgfx.cmake/bgfx/3rdparty/meshoptimizer/src/*.h
     )
