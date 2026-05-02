@@ -6,6 +6,7 @@ designed to be developed and tested by Coding Agents.
 ## First Commands
 
 ```powershell
+git submodule update --init --recursive
 cmake -S . -B .build-release\build
 cmake --build .build-release\build --config Release --target testbridge_lab -- /m
 ctest --test-dir .build-release\build -C Release --output-on-failure
@@ -14,6 +15,10 @@ ctest --test-dir .build-release\build -C Release --output-on-failure
 Use `tools\testbridge-mcp\.venv\Scripts\python.exe` when the MCP virtualenv is
 available. The CTest suite launches the real app and verifies QML, bgfx, live
 shader, screenshot, and render-state paths.
+
+Read [docs/AGENT_RUNBOOK.md](docs/AGENT_RUNBOOK.md) before unattended work. It
+defines the bootstrap, acceptance criteria, failure triage, and safety
+boundaries for Agent-driven development.
 
 ## Agent Rules
 
@@ -29,7 +34,8 @@ shader, screenshot, and render-state paths.
 
 - UI work: `qml.find`, `qml.meta`, `qml.geometry`, `qml.tree`, `qml.click`.
 - Render work: `render.caps`, `render.stats`, `render.resources`, `window.grab`.
-- Shader work: `shader.compile`, `shader.apply`, screenshot/golden diff, `shader.revert`.
+- Shader work: `shader.list`, `shader.compile`, `shader.apply`,
+  `render.resources.liveShader`, screenshot/golden diff, `shader.revert`.
 - Failure work: inspect `artifacts/*/manifest.json`, screenshot, app log, and diff images.
 
 Read [docs/AGENT_WORKFLOWS.md](docs/AGENT_WORKFLOWS.md) before making broad changes.

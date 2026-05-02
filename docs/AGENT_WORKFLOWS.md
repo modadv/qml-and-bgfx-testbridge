@@ -3,6 +3,7 @@
 ## Build And Baseline
 
 ```powershell
+git submodule update --init --recursive
 cmake -S . -B .build-release\build
 cmake --build .build-release\build --config Release --target testbridge_lab -- /m
 ctest --test-dir .build-release\build -C Release --output-on-failure
@@ -14,6 +15,9 @@ ctest --test-dir .build-release\build -C Release --output-on-failure
 2. Use MCP tools or JSON-RPC:
    - `app_describe`
    - `qml_tree`
+   - `qml_hit`
+   - `render_caps`
+   - `render_stats`
    - `render_resources`
    - `screenshot`
 3. Prefer `qml.meta` and `qml.geometry` over reading QML by eye.
@@ -22,7 +26,8 @@ ctest --test-dir .build-release\build -C Release --output-on-failure
 
 1. Add stable `objectName` values.
 2. Expose important state with `Q_PROPERTY` or `Q_INVOKABLE`.
-3. Add or update smoke assertions.
+3. Add or update smoke assertions with `qml.find`, `qml.meta`,
+   `qml.geometry`, `qml.tree`, and user-equivalent input.
 4. Run `testbridge_lab_smoke`.
 
 ## Add A Render Feature
@@ -36,8 +41,16 @@ ctest --test-dir .build-release\build -C Release --output-on-failure
 
 1. Compile with `shader.compile`.
 2. Apply with `shader.apply`.
-3. Verify with `render.resources.liveShader`, `window.grab`, and golden diff.
-4. Revert with `shader.revert` if the result is wrong.
+3. Poll `render.resources.liveShader.slots` until the target slot reports the
+   compiled hash.
+4. Verify with `window.grab`, render stats, and golden diff when available.
+5. Revert with `shader.revert` if the result is wrong or the experiment is done.
+
+Sample slots:
+
+- `terrain_simple.vertex`
+- `terrain_simple.fragment`
+- `overlay_max_elevation.compute`
 
 ## Failure Triage
 

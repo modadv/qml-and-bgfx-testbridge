@@ -20,6 +20,7 @@ py -3 scripts\new_project.py "My Render App" <workspace>\my-render-app
 ## Verify
 
 ```powershell
+git submodule update --init --recursive
 cmake -S . -B .build-release\build
 cmake --build .build-release\build --config Release --target my_render_app -- /m
 ctest --test-dir .build-release\build -C Release --output-on-failure
@@ -33,4 +34,5 @@ ctest --test-dir .build-release\build -C Release --output-on-failure
 - Renderer must expose `render.caps`, `render.stats`, `render.resources`
 - Live shader slots must be explicitly whitelisted
 
-See `recipes/` for Agent task workflows.
+See `docs/AGENT_RUNBOOK.md` for unattended operation and `recipes/` for Agent
+task workflows.

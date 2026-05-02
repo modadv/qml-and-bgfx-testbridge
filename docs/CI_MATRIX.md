@@ -12,8 +12,11 @@ The default configure now registers:
 - `testbridge_lab_smoke_full`: `TESTBRIDGE_RENDER_TIER=full`, `1180x760`.
 - `testbridge_lab_smoke_nocompute_small`: `TESTBRIDGE_RENDER_TIER=nocompute`,
   `960x640`.
+- `testbridge_lab_live_shader_full`: `TESTBRIDGE_RENDER_TIER=full`, `1180x760`,
+  plus live vertex, fragment, and compute shader compile/apply/revert self-test.
 - `testbridge_lab_live_shader_nocompute`: `TESTBRIDGE_RENDER_TIER=nocompute`,
-  `960x640`, plus live shader compile/apply/revert self-test.
+  `960x640`, plus live vertex and fragment shader compile/apply/revert
+  self-test. Compute slots are skipped when `render.caps.noCompute` is true.
 
 Run all:
 
@@ -25,6 +28,12 @@ Run a tier:
 
 ```powershell
 ctest --test-dir .build-release\build -C Release -L nocompute --output-on-failure
+```
+
+Run live shader tests:
+
+```powershell
+ctest --test-dir .build-release\build -C Release -L shader --output-on-failure
 ```
 
 ## Environment Matrix

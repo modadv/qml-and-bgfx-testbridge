@@ -16,6 +16,8 @@ with a built-in local automation and render-inspection loop.
 
 ## Documentation
 
+- [Agent Runbook](docs/AGENT_RUNBOOK.md): first-read bootstrap, verification,
+  TestBridge usage, failure triage, and safety rules for unattended Agents.
 - [Architecture](docs/ARCHITECTURE.md): current module boundaries, runtime flow,
   protocol surface, build graph, and known risks.
 - [Template Usage](docs/TEMPLATE_USAGE.md): create a new Qt QML + bgfx project
@@ -91,11 +93,17 @@ tools\testbridge-mcp\.venv\Scripts\python.exe tools\template\validate_manifest.p
 ```
 
 The smoke test launches the real app, connects to TestBridge, verifies
-`app.ping/app.version`, finds QML objects, clicks `lab_increment_click`, reads
-`lab_counter_label`, waits for a log line, grabs a PNG screenshot, and quits the
-app via RPC. It now also verifies `app.describe`, `qml.meta`, `render.caps`,
-`render.stats`, `render.resources`, and validates that the bgfx render region
-contains varied pixels, not just a PNG header.
+`app.ping/app.version`, enumerates and hit-tests QML objects, triggers
+`qml.click`, `qml.mouse`, and `qml.key` input, reads `lab_counter_label`, waits
+for a log line, grabs a PNG screenshot, and quits the app via RPC. It also
+verifies `app.describe`, `qml.meta`, `qml.geometry`, `qml.tree`, `render.caps`,
+`render.stats`, `render.resources`, live shader state, and that the bgfx render
+region contains varied pixels, not just a PNG header.
+
+When `TESTBRIDGE_LIVE_SHADER_SELFTEST=1`, the live shader smoke path compiles,
+applies, observes, and reverts the allowlisted sample slots:
+`terrain_simple.vertex`, `terrain_simple.fragment`, and
+`overlay_max_elevation.compute` when the selected render tier supports compute.
 
 Useful environment overrides:
 

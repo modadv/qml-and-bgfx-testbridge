@@ -296,7 +296,8 @@ The smoke test covers:
 7. Waiting for a counter log line.
 8. Capturing a PNG screenshot.
 9. Inspecting render caps, stats, and resources.
-10. Exercising the live shader path when enabled.
+10. Exercising live vertex, fragment, and available compute shader paths when
+    enabled.
 11. Calling `app.quit`.
 
 ## Current Risks

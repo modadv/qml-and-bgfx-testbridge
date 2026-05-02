@@ -43,6 +43,8 @@ Stop it from `QCoreApplication::aboutToQuit`.
 - `render.caps`: bgfx capabilities and backend tier.
 - `render.stats`: host-provided frame/performance counters.
 - `render.resources`: host-provided scene/resource state.
+- `shader.list/compile/apply/revert`: controlled live shader slot iteration
+  when enabled by the host.
 - `test.artifacts`: artifact collection capability metadata.
 
 The Python MCP server exposes matching tools so an Agent can use the same
@@ -67,3 +69,18 @@ The real GUI smoke test writes artifacts on failure. Set
 - `app.log`: copied app process log.
 
 Use `TESTBRIDGE_FORCE_ARTIFACT_FAILURE=1` to verify the failure collection path.
+
+## Unattended Agent Entry Point
+
+Use `docs/AGENT_RUNBOOK.md` as the first-read document for fresh-clone
+bootstrap, complete verification, failure triage, and safety boundaries.
+
+## Safety Notes
+
+- Bind TestBridge to loopback only.
+- Disable TestBridge in production builds unless a project explicitly requires
+  local automation.
+- Keep live shader slots allowlisted and use the host `shaderc` compile/cache
+  path.
+- Do not let RPC handlers mutate bgfx resources directly from non-render
+  threads.

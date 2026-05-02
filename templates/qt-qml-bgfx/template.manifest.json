@@ -10,8 +10,15 @@
   ],
   "agentCapabilities": [
     "app.describe",
+    "qml.list",
+    "qml.find",
+    "qml.geometry",
     "qml.meta",
     "qml.tree",
+    "qml.hit",
+    "qml.click",
+    "qml.mouse",
+    "qml.key",
     "window.grab",
     "render.caps",
     "render.stats",
@@ -19,6 +26,7 @@
     "shader.compile",
     "shader.apply",
     "shader.revert",
+    "shader.list",
     "test.artifacts"
   ],
   "requiredObjectNames": [

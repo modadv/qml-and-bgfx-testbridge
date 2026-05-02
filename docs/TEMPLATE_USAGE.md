@@ -9,8 +9,25 @@ project with `scripts/new_project.py`.
 py -3 scripts\new_project.py "Terrain Studio" <workspace>\terrain-studio
 ```
 
-By default the script copies the full starter kit, including `external/bgfx.cmake`.
-Use `--no-external` if your organization manages bgfx separately.
+By default the script copies the full starter kit layout. In this repository
+`external/bgfx.cmake` is a Git submodule, not vendored source. Generated
+projects should either keep it as a submodule or use `--no-external` and provide
+their own bgfx integration.
+
+For the submodule path, initialize after generation or fresh clone:
+
+```powershell
+git submodule update --init --recursive
+```
+
+The expected top-level submodule commit is:
+
+```text
+external/bgfx.cmake 4e42ca1ef501a1e29d25975d735198fa5fad0903
+```
+
+Do not commit direct source files under `external/bgfx.cmake` into the main
+repository.
 
 After generation:
 

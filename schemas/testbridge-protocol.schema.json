@@ -26,9 +26,12 @@
         "available": {"type": "boolean"},
         "backend": {"type": "string"},
         "tier": {"type": "string"},
+        "noCompute": {"type": "boolean"},
         "hasCompute": {"type": "boolean"},
         "hasIndirect": {"type": "boolean"},
-        "hasImageRW": {"type": "boolean"}
+        "hasImageRW": {"type": "boolean"},
+        "initialized": {"type": "boolean"},
+        "lastFrameId": {"type": "integer"}
       }
     },
     "liveShader": {
@@ -39,7 +42,25 @@
         "active": {"type": "boolean"},
         "activeSlot": {"type": "string"},
         "activeHash": {"type": "string"},
-        "lastError": {"type": "string"}
+        "activeSlots": {"type": "array", "items": {"type": "string"}},
+        "pending": {"type": "boolean"},
+        "revertPending": {"type": "boolean"},
+        "lastError": {"type": "string"},
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {"type": "string"},
+              "active": {"type": "boolean"},
+              "activeHash": {"type": "string"},
+              "activeBinPath": {"type": "string"},
+              "pending": {"type": "boolean"},
+              "revertPending": {"type": "boolean"},
+              "lastError": {"type": "string"}
+            }
+          }
+        }
       }
     }
   }

@@ -46,3 +46,28 @@ operational capabilities. Numeric handle IDs are acceptable as diagnostics.
 Collect renderer state at a safe point owned by the renderer, then let the RPC
 thread read the copied snapshot or ask the GUI thread for plain data. Do not let
 RPC handlers mutate bgfx directly.
+
+## Live Shader Providers
+
+If a host enables live shader iteration, it should expose:
+
+- an allowlisted slot list through `shader.list`
+- compile diagnostics, source path, binary path, backend, and content hash
+- per-slot active hash, active binary path, pending flag, revert flag, and last
+  error through `render.resources.liveShader`
+- render-thread apply/revert, never direct bgfx mutation from the RPC thread
+
+Recommended slot naming:
+
+```text
+<program-or-pass>.<stage>
+```
+
+Examples:
+
+- `terrain_simple.vertex`
+- `terrain_simple.fragment`
+- `overlay_max_elevation.compute`
+
+Compute slots should be unavailable or skipped when `render.caps.noCompute` is
+true.

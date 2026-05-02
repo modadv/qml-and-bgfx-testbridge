@@ -5,6 +5,7 @@ Use this project as an Agent-ready Qt QML + bgfx starter kit.
 Start with:
 
 ```powershell
+git submodule update --init --recursive
 ctest --test-dir .build-release\build -C Release --output-on-failure
 ```
 
@@ -15,6 +16,7 @@ object state from source alone.
 Important docs:
 
 - `AGENTS.md`
+- `docs/AGENT_RUNBOOK.md`
 - `docs/TEMPLATE_USAGE.md`
 - `docs/AGENT_WORKFLOWS.md`
 - `docs/PROJECT_CONVENTIONS.md`

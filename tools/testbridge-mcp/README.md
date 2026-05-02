@@ -121,6 +121,17 @@ Add to your project's `.claude/mcp.json` (or `~/.claude/mcp.json`):
 | `shader_revert(slot)` | `shader.revert` | Revert live shader slot to stock program |
 | `shader_list()` | `shader.list` | List supported live shader slots and cache records |
 
+Sample live shader slots exposed by this template:
+
+| Slot | Stage |
+|---|---|
+| `terrain_simple.vertex` | Vertex |
+| `terrain_simple.fragment` | Fragment |
+| `overlay_max_elevation.compute` | Compute |
+
+Always call `shader_list()` before compiling. Generated host applications may
+rename, add, or remove slots.
+
 ---
 
 ## Agent Recipes

@@ -6,6 +6,7 @@
   "agentEntryPoints": [
     "AGENTS.md",
     "CLAUDE.md",
+    "docs/AGENT_RUNBOOK.md",
     "docs/AGENT_WORKFLOWS.md"
   ],
   "capabilities": [

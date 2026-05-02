@@ -78,11 +78,32 @@ The smoke test must cover:
 | Startup | The app launches and the TestBridge port opens. |
 | App RPC | `app.ping` returns `pong`; `app.version` returns a version. |
 | QML discovery | The main window, controls, labels, and 3D surface are discoverable. |
-| Input | `qml.click` can activate the increment button. |
+| QML tree | `qml.list`, `qml.tree`, and `qml.hit` expose named and visible controls. |
+| Input | `qml.click`, `qml.mouse`, and `qml.key` can trigger user-equivalent events. |
 | State readback | `qml.get` can read the counter text. |
 | Log wait | `log.wait` can observe the counter log line. |
 | Screenshot | `window.grab` returns a PNG. |
+| Render caps | `render.caps` reports backend, tier, compute flags, and device state. |
+| Render stats | `render.stats` reports performance and bgfx frame counters. |
+| Render resources | `render.resources` reports assets, textures, programs, buffers, and live shader state. |
 | Lifecycle | `app.quit` exits the application. |
+
+## Live Shader Verification
+
+```powershell
+ctest --test-dir .build-release\build -C Release -L shader --output-on-failure
+```
+
+The full-tier test must compile, apply, observe, and revert:
+
+| Slot | Stage |
+|---|---|
+| `terrain_simple.vertex` | Vertex |
+| `terrain_simple.fragment` | Fragment |
+| `overlay_max_elevation.compute` | Compute |
+
+The NoCompute test must cover vertex and fragment slots and skip compute when
+`render.caps.noCompute` is true.
 
 ## MCP Unit Tests
 
@@ -115,6 +136,8 @@ validate the Python MCP layer and JSON-RPC client behavior.
 | `Qt5::WebSockets` is missing | The selected Qt package is incomplete. |
 | Debug app crashes | Mixed Qt runtime/build configurations can be unstable on the QFBO path. |
 | Shader load failure | Working directory is wrong or post-build shader copy did not run. |
+| Live shader compile failure | `TESTBRIDGE_SHADERC` is wrong, include paths are missing, or the stage/profile is invalid. |
+| Live shader apply failure | Slot is not allowlisted, compiled hash is stale, or compute is unavailable in the current tier. |
 | WebSocket disconnect | Single-client policy, idle timeout, or port conflict. |
 | Screenshot timeout | Payload too large or window not fully rendered. |
 | Clean clone build failure | Recursive submodules were not initialized. |
