@@ -1,0 +1,45 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "windows-release-system-qt",
+      "displayName": "Windows Release with system Qt",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/.build-release/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{QT_PREFIX}",
+        "ENABLE_TESTBRIDGE": "ON",
+        "ENABLE_LIVE_SHADER": "ON",
+        "ENABLE_AGENT_MCP": "ON"
+      }
+    },
+    {
+      "name": "windows-release-no-agent",
+      "displayName": "Windows Release without TestBridge",
+      "inherits": "windows-release-system-qt",
+      "binaryDir": "${sourceDir}/.build-release-no-agent/build",
+      "cacheVariables": {
+        "ENABLE_TESTBRIDGE": "OFF",
+        "ENABLE_LIVE_SHADER": "OFF",
+        "ENABLE_AGENT_MCP": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release-app",
+      "configurePreset": "windows-release-system-qt",
+      "configuration": "Release",
+      "targets": ["testbridge_lab"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "windows-release-system-qt",
+      "configuration": "Release",
+      "output": {"outputOnFailure": true}
+    }
+  ]
+}

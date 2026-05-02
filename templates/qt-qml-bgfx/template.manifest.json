@@ -1,0 +1,58 @@
+{
+  "$schema": "./template.manifest.schema.json",
+  "name": "qt-qml-bgfx-agent-template",
+  "version": "0.1.0",
+  "description": "AI-Agent-ready Qt 5.15 QML + bgfx desktop application starter kit.",
+  "sourceTargets": [
+    "testbridge",
+    "engine_core",
+    "testbridge_lab"
+  ],
+  "agentCapabilities": [
+    "app.describe",
+    "qml.meta",
+    "qml.tree",
+    "window.grab",
+    "render.caps",
+    "render.stats",
+    "render.resources",
+    "shader.compile",
+    "shader.apply",
+    "shader.revert",
+    "test.artifacts"
+  ],
+  "requiredObjectNames": [
+    "main_window",
+    "lab_engine_view_3d"
+  ],
+  "runtimeEnv": [
+    "TESTBRIDGE_PORT",
+    "TESTBRIDGE_QT_BIN",
+    "TESTBRIDGE_RENDER_TIER",
+    "TESTBRIDGE_ARTIFACT_DIR",
+    "TESTBRIDGE_GOLDEN_BGFX_REGION",
+    "TESTBRIDGE_LIVE_SHADER_SELFTEST"
+  ],
+  "verification": [
+    "testbridge_mcp_unit",
+    "testbridge_lab_smoke",
+    "testbridge_lab_smoke_full",
+    "testbridge_lab_smoke_nocompute_small",
+    "testbridge_lab_live_shader_nocompute",
+    "engine_heightfield_asset_tests"
+  ],
+  "recipes": [
+    "recipes/bootstrap-windows-system-qt.md",
+    "recipes/add-qml-control-and-test.md",
+    "recipes/add-render-provider-field.md",
+    "recipes/live-shader-iteration.md",
+    "recipes/golden-image-oracle.md",
+    "recipes/failure-artifact-triage.md",
+    "recipes/package-consumer-check.md"
+  ],
+  "knownLimits": [
+    "TestBridge is intended for local loopback development and CI.",
+    "Current live shader implementation exposes terrain_simple.fragment first.",
+    "Platform-specific golden thresholds may need calibration."
+  ]
+}

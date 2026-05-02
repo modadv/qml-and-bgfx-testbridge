@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "description",
+    "sourceTargets",
+    "agentCapabilities",
+    "requiredObjectNames",
+    "verification",
+    "recipes"
+  ],
+  "properties": {
+    "name": {"type": "string"},
+    "version": {"type": "string"},
+    "description": {"type": "string"},
+    "sourceTargets": {"type": "array", "items": {"type": "string"}},
+    "agentCapabilities": {"type": "array", "items": {"type": "string"}},
+    "requiredObjectNames": {"type": "array", "items": {"type": "string"}},
+    "runtimeEnv": {"type": "array", "items": {"type": "string"}},
+    "verification": {"type": "array", "items": {"type": "string"}},
+    "recipes": {"type": "array", "items": {"type": "string"}},
+    "knownLimits": {"type": "array", "items": {"type": "string"}}
+  }
+}

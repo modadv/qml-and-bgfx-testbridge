@@ -1,0 +1,41 @@
+# Build outputs
+.build/
+.build-release/
+.install-testbridge/
+build/
+out/
+
+# Conan/CMake generated files
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Runtime/generated files
+assets/
+startup_trace.log
+heightmap_trace.log
+app_stdout.log
+app_stderr.log
+*.log
+artifacts/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+tools/testbridge-mcp/.venv/
+tools/testbridge-mcp/*.egg-info/
+
+# IDE/editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store

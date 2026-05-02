@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "testbridge-mcp"
+version = "0.1.0"
+description = "MCP server bridging AI coding agents to TestBridge via WebSocket JSON-RPC 2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=0.2",
+    "websockets>=12",
+    "pydantic>=2",
+    "anyio>=4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+testbridge-mcp = "testbridge_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["testbridge_mcp*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["testbridge_mcp/tests"]

@@ -1,0 +1,26 @@
+name: Windows Render Matrix
+
+on:
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: self-hosted
+    env:
+      QT_PREFIX: ${{ vars.QT_PREFIX }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B .build-release\build -DCMAKE_PREFIX_PATH="$env:QT_PREFIX"
+      - name: Build
+        run: cmake --build .build-release\build --config Release --target testbridge_lab -- /m
+      - name: Test
+        run: ctest --test-dir .build-release\build -C Release --output-on-failure
+      - name: Upload artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testbridge-artifacts
+          path: artifacts

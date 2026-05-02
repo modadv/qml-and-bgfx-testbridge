@@ -1,0 +1,27 @@
+{
+  "template": "AI-Agent-ready Qt QML + bgfx Desktop App Template",
+  "version": "0.1.0",
+  "projectType": "qt-qml-bgfx-agent-template",
+  "defaultAppTarget": "testbridge_lab",
+  "agentEntryPoints": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/AGENT_WORKFLOWS.md"
+  ],
+  "capabilities": [
+    "qml-introspection",
+    "window-screenshot",
+    "render-caps",
+    "render-stats",
+    "render-resources",
+    "golden-image-oracle",
+    "failure-artifacts",
+    "live-shader-compile-apply-revert",
+    "mcp-tools"
+  ],
+  "safeDefaults": {
+    "testbridgeListenHost": "127.0.0.1",
+    "testbridgeEnabledInReleaseBuilds": false,
+    "liveShaderSlotsRequireWhitelist": true
+  }
+}
