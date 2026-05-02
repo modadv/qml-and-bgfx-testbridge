@@ -57,9 +57,10 @@ def main() -> int:
         str(ROOT / "tests/cmake_package_consumer"),
         "-B",
         str(consumer_build),
-        f"-DCMAKE_BUILD_TYPE={args.config}",
         f"-DCMAKE_PREFIX_PATH={';'.join(prefix_parts)}",
     ]
+    if platform.system() != "Windows":
+        configure.append(f"-DCMAKE_BUILD_TYPE={args.config}")
     toolchain = generators / "conan_toolchain.cmake"
     if toolchain.exists():
         configure.append(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}")
