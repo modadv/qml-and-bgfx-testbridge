@@ -38,6 +38,7 @@
     "testbridge_lab_smoke",
     "testbridge_lab_smoke_full",
     "testbridge_lab_smoke_nocompute_small",
+    "testbridge_lab_live_shader_full",
     "testbridge_lab_live_shader_nocompute",
     "engine_heightfield_asset_tests"
   ],
@@ -52,7 +53,7 @@
   ],
   "knownLimits": [
     "TestBridge is intended for local loopback development and CI.",
-    "Current live shader implementation exposes terrain_simple.fragment first.",
+    "Live shader slots are explicitly allowlisted by the host renderer.",
     "Platform-specific golden thresholds may need calibration."
   ]
 }

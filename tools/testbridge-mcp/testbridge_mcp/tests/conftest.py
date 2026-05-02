@@ -140,7 +140,11 @@ async def mock_bridge():
                     "jsonrpc": "2.0", "id": req_id,
                     "result": {
                         "available": True,
-                        "supportedSlots": ["terrain_simple.fragment"],
+                        "supportedSlots": [
+                            "terrain_simple.vertex",
+                            "terrain_simple.fragment",
+                            "overlay_max_elevation.compute",
+                        ],
                         "records": [{"hash": "abc123", "ok": True}]
                     }
                 }))

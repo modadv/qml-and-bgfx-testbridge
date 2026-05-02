@@ -268,9 +268,10 @@ public:
     void setOverlayPixelScale(float scale);
     void setImageTransform(float rotationDeg, float scaleX, float scaleY);
     void setHeightPixelSize(float pixelSize);
-    void requestLiveTerrainSimpleFragment(const std::string& binPath,
-                                          const std::string& hash);
-    void requestRevertLiveTerrainSimpleFragment();
+    void requestLiveShader(const std::string& slot,
+                           const std::string& binPath,
+                           const std::string& hash);
+    void requestRevertLiveShader(const std::string& slot);
 
     float getLoadTime() const { return m_loadTime; }
     float getCpuSmapTime() const { return m_cpuSmapGenTime; }
@@ -425,15 +426,24 @@ public:
 
     // NoCompute fallback: simple fixed-grid terrain renderer (no isubd / no compute / no indirect).
     bgfx::ProgramHandle m_programsSimpleDraw[types::SHADING_COUNT] = { BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE };
+    struct LiveShaderSlotState
+    {
+        bool active = false;
+        bool pending = false;
+        bool revertPending = false;
+        std::string pendingBinPath;
+        std::string pendingHash;
+        std::string activeBinPath;
+        std::string activeHash;
+        std::string lastError;
+    };
+
     bgfx::ProgramHandle m_originalSimpleTerrainProgram = BGFX_INVALID_HANDLE;
-    bool m_liveSimpleTerrainActive = false;
-    bool m_liveShaderPending = false;
-    bool m_liveShaderRevertPending = false;
-    std::string m_pendingLiveShaderBinPath;
-    std::string m_pendingLiveShaderHash;
-    std::string m_liveShaderHash;
-    std::string m_liveShaderBinPath;
-    std::string m_liveShaderLastError;
+    bgfx::ProgramHandle m_originalOverlayMaxElevationProgram = BGFX_INVALID_HANDLE;
+    LiveShaderSlotState m_liveTerrainSimpleVertex;
+    LiveShaderSlotState m_liveTerrainSimpleFragment;
+    LiveShaderSlotState m_liveOverlayMaxElevationCompute;
+    bool rebuildLiveTerrainSimpleProgram();
     bgfx::VertexBufferHandle m_simpleGridVertices = BGFX_INVALID_HANDLE;
     bgfx::IndexBufferHandle  m_simpleGridIndices = BGFX_INVALID_HANDLE;
     bgfx::VertexLayout       m_simpleGridLayout;

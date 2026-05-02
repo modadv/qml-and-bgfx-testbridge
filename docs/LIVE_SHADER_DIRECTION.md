@@ -31,16 +31,22 @@ Implemented RPC surface:
 - `shader.revert`: restore the previous known-good program.
 - `shader.list`: report live shader slots, hashes, backend, and last errors.
 
-The current implementation intentionally supports one safe slot:
-`terrain_simple.fragment`, used by the NoCompute terrain path. This proves the
-end-to-end Agent loop without exposing compute shaders or replacing every
-program in the renderer at once.
+The current implementation exposes controlled slots for all bgfx shader stages
+used by the sample renderer:
+
+- `terrain_simple.vertex`
+- `terrain_simple.fragment`
+- `overlay_max_elevation.compute`
+
+Each slot uses the same `shaderc` compiler pipeline as the build, caches output
+by content/backend hash, applies the compiled binary on the render thread, and
+supports revert to the previous known-good program.
 
 Useful environment variables:
 
 - `TESTBRIDGE_SHADERC`: override shaderc executable path.
 - `TESTBRIDGE_SHADER_CACHE_DIR`: override compile cache directory.
 - `TESTBRIDGE_LIVE_SHADER_SELFTEST=1`: make the smoke test compile, apply, and
-  revert a live fragment shader.
+  revert live vertex, fragment, and available compute shader slots.
 
 Do not expose unrestricted filesystem includes or direct backend API handles.

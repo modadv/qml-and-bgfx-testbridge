@@ -496,6 +496,63 @@ void main()
 }
 '''
 
+LIVE_SHADER_VERTEX_SELFTEST_SOURCE = r'''$input a_position
+$output v_texcoord0
+
+#include <bgfx_shader.sh>
+#include "uniforms.sh"
+
+SAMPLER2D(u_DmapSampler, 0);
+
+void main()
+{
+    vec4 finalVertex = vec4(a_position.x, a_position.y, 0.0, 1.0);
+    finalVertex.x *= u_terrainHalfWidth;
+    finalVertex.y *= u_terrainHalfHeight;
+
+    vec2 uv;
+    uv.x = (finalVertex.x + u_terrainHalfWidth)  / (2.0 * u_terrainHalfWidth);
+    uv.y = (finalVertex.y + u_terrainHalfHeight) / (2.0 * u_terrainHalfHeight);
+
+    float wave = sin(uv.x * 18.0) * cos(uv.y * 18.0) * 0.015;
+    finalVertex.z = texture2DLod(u_DmapSampler, uv, 0.0).x * u_DmapFactor + u_DmapBias + wave;
+
+    v_texcoord0 = uv;
+    gl_Position = mul(u_modelViewProj, finalVertex);
+}
+'''
+
+LIVE_SHADER_COMPUTE_SELFTEST_SOURCE = r'''#include "bgfx_compute.sh"
+
+BUFFER_RO(u_rects, vec4, 0);
+SAMPLER2D(u_DmapSampler, 1);
+IMAGE2D_WR(u_rectMaxOut, r32f, 2);
+
+uniform vec4 u_rectParams;
+uniform vec4 u_rectSampleParams;
+
+NUM_THREADS(1, 1, 1)
+void main()
+{
+    uint rectIndex = gl_WorkGroupID.x;
+    if (rectIndex >= uint(u_rectParams.x))
+        return;
+
+    uint base = rectIndex * 2u;
+    vec4 rect0 = u_rects[base];
+    vec4 rect1 = u_rects[base + 1u];
+    vec2 p = rect0.xy + 0.5 * rect0.zw + 0.5 * rect1.xy;
+
+    vec2 uv;
+    uv.x = (p.x + u_rectSampleParams.x) / (2.0 * u_rectSampleParams.x);
+    uv.y = (p.y + u_rectSampleParams.y) / (2.0 * u_rectSampleParams.y);
+    uv = clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0));
+
+    float h = texture2DLod(u_DmapSampler, uv, 0.0).r * u_rectSampleParams.z + u_rectSampleParams.w;
+    imageStore(u_rectMaxOut, ivec2(rectIndex, 0), vec4(h, 0.0, 0.0, 0.0));
+}
+'''
+
 
 async def _wait_live_shader_state(rpc: Rpc, expected_hash: str | None, timeout_s: float = 8.0) -> dict:
     deadline = time.monotonic() + timeout_s
@@ -515,6 +572,32 @@ async def _wait_live_shader_state(rpc: Rpc, expected_hash: str | None, timeout_s
     raise AssertionError(f"live shader state did not reach expected hash {expected_hash}: {last}")
 
 
+async def _wait_live_shader_slot_state(
+    rpc: Rpc,
+    slot: str,
+    expected_hash: str | None,
+    timeout_s: float = 8.0,
+) -> dict:
+    deadline = time.monotonic() + timeout_s
+    last = {}
+    while time.monotonic() < deadline:
+        with contextlib.suppress(Exception):
+            await rpc.call("window.grab", {}, timeout=10.0)
+        resources = await rpc.call("render.resources", {}, timeout=10.0)
+        live = resources.get("liveShader", {})
+        slots = live.get("slots", [])
+        slot_state = next((item for item in slots if item.get("slot") == slot), None)
+        last = slot_state or live
+        if slot_state:
+            if expected_hash is None:
+                if not slot_state.get("active"):
+                    return slot_state
+            elif slot_state.get("activeHash") == expected_hash:
+                return slot_state
+        await asyncio.sleep(0.35)
+    raise AssertionError(f"live shader slot {slot} did not reach expected hash {expected_hash}: {last}")
+
+
 async def _run_smoke(port: int, log_path: Path) -> None:
     import websockets
 
@@ -531,11 +614,13 @@ async def _run_smoke(port: int, log_path: Path) -> None:
 
             main_window = await rpc.call("qml.find", {"objectName": "main_window"})
             increment = await rpc.call("qml.find", {"objectName": "lab_increment_click"})
+            reset = await rpc.call("qml.find", {"objectName": "lab_reset_click"})
             counter_label = await rpc.call("qml.find", {"objectName": "lab_counter_label"})
             engine_view = await rpc.call("qml.find", {"objectName": "lab_engine_view_3d"})
 
             assert main_window
             assert increment
+            assert reset
             assert counter_label
             assert engine_view
 
@@ -546,6 +631,20 @@ async def _run_smoke(port: int, log_path: Path) -> None:
             meta = await rpc.call("qml.meta", {"handle": engine_view, "include_values": False})
             assert meta["objectName"] == "lab_engine_view_3d"
             assert meta["properties"]
+            qml_list = await rpc.call("qml.list")
+            listed_names = {item.get("objectName") for item in qml_list}
+            assert {"main_window", "lab_increment_click", "lab_reset_click", "lab_engine_view_3d"} <= listed_names
+            qml_tree = await rpc.call("qml.tree", {"max_depth": 20, "only_visible": True})
+            tree_names = {item.get("objectName") for item in qml_tree["items"]}
+            assert "lab_engine_view_3d" in tree_names
+            hit_items = await rpc.call(
+                "qml.hit",
+                {
+                    "x": geom["scene"]["x"] + geom["scene"]["w"] / 2,
+                    "y": geom["scene"]["y"] + geom["scene"]["h"] / 2,
+                },
+            )
+            assert any(item.get("objectName") == "lab_engine_view_3d" for item in hit_items)
 
             if os.environ.get("TESTBRIDGE_FORCE_ARTIFACT_FAILURE") == "1":
                 raise AssertionError("forced artifact failure")
@@ -557,6 +656,8 @@ async def _run_smoke(port: int, log_path: Path) -> None:
 
             log_hit = await rpc.call("log.wait", {"regex": "counter incremented to 1", "timeout_ms": 5000}, timeout=8.0)
             assert log_hit and "counter incremented to 1" in log_hit["text"]
+            assert await rpc.call("qml.mouse", {"handle": reset, "action": "click"}) is True
+            await rpc.call("qml.key", {"handle": engine_view, "key": "space", "action": "click"})
 
             window_width = await rpc.call("qml.get", {"handle": main_window, "property": "width"})
             window_height = await rpc.call("qml.get", {"handle": main_window, "property": "height"})
@@ -584,27 +685,40 @@ async def _run_smoke(port: int, log_path: Path) -> None:
 
             if os.environ.get("TESTBRIDGE_LIVE_SHADER_SELFTEST") == "1":
                 shader_list = await rpc.call("shader.list")
+                assert "terrain_simple.vertex" in shader_list["supportedSlots"]
                 assert "terrain_simple.fragment" in shader_list["supportedSlots"]
-                compiled = await rpc.call(
-                    "shader.compile",
-                    {"slot": "terrain_simple.fragment", "source": LIVE_SHADER_SELFTEST_SOURCE},
-                    timeout=45.0,
-                )
-                assert compiled["ok"] is True, compiled
-                applied = await rpc.call(
-                    "shader.apply",
-                    {"slot": "terrain_simple.fragment", "hash": compiled["hash"]},
-                    timeout=10.0,
-                )
-                assert applied["queued"] is True
-                await _wait_live_shader_state(rpc, compiled["hash"])
-                reverted = await rpc.call(
-                    "shader.revert",
-                    {"slot": "terrain_simple.fragment"},
-                    timeout=10.0,
-                )
-                assert reverted["queued"] is True
-                await _wait_live_shader_state(rpc, None)
+                assert "overlay_max_elevation.compute" in shader_list["supportedSlots"]
+
+                shader_sources = [
+                    ("terrain_simple.vertex", LIVE_SHADER_VERTEX_SELFTEST_SOURCE),
+                    ("terrain_simple.fragment", LIVE_SHADER_SELFTEST_SOURCE),
+                ]
+                if not caps.get("noCompute"):
+                    shader_sources.append(("overlay_max_elevation.compute", LIVE_SHADER_COMPUTE_SELFTEST_SOURCE))
+
+                for slot, source in shader_sources:
+                    compiled = await rpc.call(
+                        "shader.compile",
+                        {"slot": slot, "source": source},
+                        timeout=45.0,
+                    )
+                    assert compiled["ok"] is True, compiled
+                    applied = await rpc.call(
+                        "shader.apply",
+                        {"slot": slot, "hash": compiled["hash"]},
+                        timeout=10.0,
+                    )
+                    assert applied["queued"] is True
+                    await _wait_live_shader_slot_state(rpc, slot, compiled["hash"])
+
+                for slot, _ in reversed(shader_sources):
+                    reverted = await rpc.call(
+                        "shader.revert",
+                        {"slot": slot},
+                        timeout=10.0,
+                    )
+                    assert reverted["queued"] is True
+                    await _wait_live_shader_slot_state(rpc, slot, None)
         except Exception as exc:
             artifact_path = await collect_artifacts(
                 rpc,

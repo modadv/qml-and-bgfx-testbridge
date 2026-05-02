@@ -107,6 +107,16 @@ if(BUILD_TESTING AND ENABLE_TESTBRIDGE)
 
         if(ENABLE_LIVE_SHADER)
             add_test(
+                NAME testbridge_lab_live_shader_full
+                COMMAND "${TESTBRIDGE_PYTHON}" tests/smoke_testbridge_lab.py
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            )
+            set_tests_properties(testbridge_lab_live_shader_full PROPERTIES
+                LABELS "render;full;shader"
+                ENVIRONMENT "TESTBRIDGE_LAB_APP=$<TARGET_FILE:testbridge_lab>;TESTBRIDGE_RENDER_TIER=full;TESTBRIDGE_LIVE_SHADER_SELFTEST=1;TESTBRIDGE_WINDOW_WIDTH=1180;TESTBRIDGE_WINDOW_HEIGHT=760"
+            )
+
+            add_test(
                 NAME testbridge_lab_live_shader_nocompute
                 COMMAND "${TESTBRIDGE_PYTHON}" tests/smoke_testbridge_lab.py
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"

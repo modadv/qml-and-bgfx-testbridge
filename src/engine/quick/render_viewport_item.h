@@ -73,9 +73,10 @@ public slots:
     Q_INVOKABLE void setOverlayUseScreenSpace(bool enabled);
     Q_INVOKABLE void setOverlayDebugAxes(bool enabled);
     Q_INVOKABLE void focusOverlayRect(int rectId);
-    void requestLiveTerrainSimpleFragment(const QString& binPath,
-                                          const QString& hash);
-    void requestRevertLiveTerrainSimpleFragment();
+    void requestLiveShader(const QString& slot,
+                           const QString& binPath,
+                           const QString& hash);
+    void requestRevertLiveShader(const QString& slot);
 
 signals:
     void heightfieldSourceChanged();
@@ -101,8 +102,10 @@ public:
     int m_focusRectId = -1;
     bool m_liveShaderPending = false;
     bool m_liveShaderRevertPending = false;
+    QString m_pendingLiveShaderSlot;
     QString m_pendingLiveShaderBinPath;
     QString m_pendingLiveShaderHash;
+    QString m_pendingLiveShaderRevertSlot;
     double m_imageScaleX = 1.0;
     double m_imageScaleY = 1.0;
     double m_imageRotation = 0.0;

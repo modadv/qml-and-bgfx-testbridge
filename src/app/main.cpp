@@ -271,15 +271,17 @@ public:
     {
         const std::string slot = params.value("slot", std::string("terrain_simple.fragment"));
         const std::string source = params.value("source", std::string{});
-        if (slot != "terrain_simple.fragment")
-            throw std::invalid_argument("only slot terrain_simple.fragment is supported");
+        QString shaderType;
+        QString sourceBase;
+        if (!slotSpec(slot, shaderType, sourceBase))
+            throw std::invalid_argument("unsupported live shader slot: " + slot);
         if (source.empty())
             throw std::invalid_argument("params.source required");
 
         QString rendererDir;
         QString platform;
         QString profile;
-        rendererTarget(rendererDir, platform, profile);
+        rendererTarget(shaderType, rendererDir, platform, profile);
 
         const QByteArray hashInput = QString::fromStdString(slot + "|" + source)
             .append("|")
@@ -290,8 +292,8 @@ public:
 
         QDir root(cacheRoot());
         root.mkpath(hash);
-        const QString sourcePath = root.filePath(hash + "/fs_live_terrain_simple.sc");
-        const QString binPath = root.filePath(hash + "/fs_live_terrain_simple.bin");
+        const QString sourcePath = root.filePath(hash + "/" + sourceBase + ".sc");
+        const QString binPath = root.filePath(hash + "/" + sourceBase + ".bin");
         const QString stdoutPath = root.filePath(hash + "/shaderc.stdout.txt");
         const QString stderrPath = root.filePath(hash + "/shaderc.stderr.txt");
 
@@ -312,7 +314,7 @@ public:
             QStringList args;
             args << "-f" << QDir::toNativeSeparators(sourcePath)
                  << "-o" << QDir::toNativeSeparators(binPath)
-                 << "--type" << "fragment"
+                 << "--type" << shaderType
                  << "--platform" << platform
                  << "--profile" << profile
                  << "-i" << QDir::toNativeSeparators(sourceDir("external/bgfx.cmake/bgfx/src"))
@@ -368,11 +370,14 @@ public:
             throw std::runtime_error("compiled shader hash not found or failed");
 
         const CompileRecord record = it->second;
+        const std::string requestedSlot = params.value("slot", record.slot.toStdString());
+        if (requestedSlot != record.slot.toStdString())
+            throw std::invalid_argument("params.slot does not match compiled shader slot");
         return onGuiThread([this, record]() {
             RenderViewportItem* item = findLabRenderViewportItem(m_engine);
             if (!item)
                 return nlohmann::json{{"queued", false}, {"reason", "RenderViewportItem not found"}};
-            item->requestLiveTerrainSimpleFragment(record.binPath, record.hash);
+            item->requestLiveShader(record.slot, record.binPath, record.hash);
             m_lastAppliedHash = record.hash;
             return nlohmann::json{
                 {"queued", true},
@@ -383,15 +388,20 @@ public:
         });
     }
 
-    nlohmann::json revert(const nlohmann::json&)
+    nlohmann::json revert(const nlohmann::json& params)
     {
-        return onGuiThread([this]() {
+        const std::string slot = params.value("slot", std::string("terrain_simple.fragment"));
+        QString shaderType;
+        QString sourceBase;
+        if (!slotSpec(slot, shaderType, sourceBase))
+            throw std::invalid_argument("unsupported live shader slot: " + slot);
+        return onGuiThread([this, slot]() {
             RenderViewportItem* item = findLabRenderViewportItem(m_engine);
             if (!item)
                 return nlohmann::json{{"queued", false}, {"reason", "RenderViewportItem not found"}};
-            item->requestRevertLiveTerrainSimpleFragment();
+            item->requestRevertLiveShader(QString::fromStdString(slot));
             m_lastAppliedHash.clear();
-            return nlohmann::json{{"queued", true}, {"slot", "terrain_simple.fragment"}};
+            return nlohmann::json{{"queued", true}, {"slot", slot}};
         });
     }
 
@@ -402,7 +412,7 @@ public:
             records.push_back(pair.second.toJson(true));
         return {
             {"available", true},
-            {"supportedSlots", {"terrain_simple.fragment"}},
+            {"supportedSlots", supportedSlotsJson()},
             {"lastAppliedHash", m_lastAppliedHash.toStdString()},
             {"cacheRoot", cacheRoot().toStdString()},
             {"shaderc", shadercPath().toStdString()},
@@ -478,7 +488,47 @@ private:
         return QDir(QCoreApplication::applicationDirPath()).filePath("../../external/bgfx.cmake/Release/" + exe);
     }
 
-    static void rendererTarget(QString& rendererDir, QString& platform, QString& profile)
+    static nlohmann::json supportedSlotsJson()
+    {
+        return {"terrain_simple.vertex", "terrain_simple.fragment", "overlay_max_elevation.compute"};
+    }
+
+    static bool slotSpec(const std::string& slot, QString& shaderType, QString& sourceBase)
+    {
+        if (slot == "terrain_simple.vertex")
+        {
+            shaderType = QStringLiteral("vertex");
+            sourceBase = QStringLiteral("vs_live_terrain_simple");
+            return true;
+        }
+        if (slot == "terrain_simple.fragment")
+        {
+            shaderType = QStringLiteral("fragment");
+            sourceBase = QStringLiteral("fs_live_terrain_simple");
+            return true;
+        }
+        if (slot == "overlay_max_elevation.compute")
+        {
+            shaderType = QStringLiteral("compute");
+            sourceBase = QStringLiteral("cs_live_overlay_max_elevation");
+            return true;
+        }
+        return false;
+    }
+
+    static QString direct3DProfile(const QString& shaderType)
+    {
+        if (shaderType == QStringLiteral("vertex"))
+            return QStringLiteral("vs_5_0");
+        if (shaderType == QStringLiteral("compute"))
+            return QStringLiteral("cs_5_0");
+        return QStringLiteral("ps_5_0");
+    }
+
+    static void rendererTarget(const QString& shaderType,
+                               QString& rendererDir,
+                               QString& platform,
+                               QString& profile)
     {
         switch (bgfx::getRendererType())
         {
@@ -486,7 +536,7 @@ private:
             case bgfx::RendererType::Direct3D12:
                 rendererDir = "dx11";
                 platform = "windows";
-                profile = "ps_5_0";
+                profile = direct3DProfile(shaderType);
                 return;
             case bgfx::RendererType::OpenGL:
                 rendererDir = "glsl";

@@ -39,14 +39,15 @@ public:
     void setOverlayPixelScale(float scale);
     void setImageTransform(float rotationDeg, float scaleX, float scaleY);
     void setHeightPixelSize(float pixelSize);
-    void requestLiveTerrainSimpleFragment(const std::string& binPath,
-                                          const std::string& hash)
+    void requestLiveShader(const std::string& slot,
+                           const std::string& binPath,
+                           const std::string& hash)
     {
-        m_renderer.requestLiveTerrainSimpleFragment(binPath, hash);
+        m_renderer.requestLiveShader(slot, binPath, hash);
     }
-    void requestRevertLiveTerrainSimpleFragment()
+    void requestRevertLiveShader(const std::string& slot)
     {
-        m_renderer.requestRevertLiveTerrainSimpleFragment();
+        m_renderer.requestRevertLiveShader(slot);
     }
     void requestOverlayMaxReadback();
     bool processOverlayMaxReadback(uint32_t frameId);

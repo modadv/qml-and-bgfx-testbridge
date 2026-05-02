@@ -248,6 +248,7 @@ bgfx::ShaderHandle loadShaderBinaryFile(const std::string& path,
     }
     return shader;
 }
+
 }
 
 TerrainRenderer::TerrainRenderer()
@@ -450,6 +451,9 @@ void TerrainRenderer::destroyAllResources()
         if (bgfx::isValid(m_originalSimpleTerrainProgram)) {
             bgfx::destroy(m_originalSimpleTerrainProgram);
         }
+        if (bgfx::isValid(m_originalOverlayMaxElevationProgram)) {
+            bgfx::destroy(m_originalOverlayMaxElevationProgram);
+        }
 
         if (bgfx::isValid(m_dummySmap)) {
             bgfx::destroy(m_dummySmap);
@@ -620,14 +624,10 @@ void TerrainRenderer::invalidateAllHandles()
         m_programsSimpleDraw[i] = BGFX_INVALID_HANDLE;
     }
     m_originalSimpleTerrainProgram = BGFX_INVALID_HANDLE;
-    m_liveSimpleTerrainActive = false;
-    m_liveShaderPending = false;
-    m_liveShaderRevertPending = false;
-    m_pendingLiveShaderBinPath.clear();
-    m_pendingLiveShaderHash.clear();
-    m_liveShaderHash.clear();
-    m_liveShaderBinPath.clear();
-    m_liveShaderLastError.clear();
+    m_originalOverlayMaxElevationProgram = BGFX_INVALID_HANDLE;
+    m_liveTerrainSimpleVertex = LiveShaderSlotState{};
+    m_liveTerrainSimpleFragment = LiveShaderSlotState{};
+    m_liveOverlayMaxElevationCompute = LiveShaderSlotState{};
 
     m_dummySmap = BGFX_INVALID_HANDLE;
     m_bufferCounter = BGFX_INVALID_HANDLE;
@@ -1618,102 +1618,283 @@ void TerrainRenderer::setHeightPixelSize(float pixelSize)
     m_rectComputeDirty = true;
 }
 
-void TerrainRenderer::requestLiveTerrainSimpleFragment(const std::string& binPath,
-                                                         const std::string& hash)
+void TerrainRenderer::requestLiveShader(const std::string& slot,
+                                        const std::string& binPath,
+                                        const std::string& hash)
 {
-    m_pendingLiveShaderBinPath = binPath;
-    m_pendingLiveShaderHash = hash;
-    m_liveShaderPending = true;
-    m_liveShaderRevertPending = false;
-}
+    LiveShaderSlotState* state = nullptr;
+    if (slot == "terrain_simple.vertex")
+        state = &m_liveTerrainSimpleVertex;
+    else if (slot == "terrain_simple.fragment")
+        state = &m_liveTerrainSimpleFragment;
+    else if (slot == "overlay_max_elevation.compute")
+        state = &m_liveOverlayMaxElevationCompute;
 
-void TerrainRenderer::requestRevertLiveTerrainSimpleFragment()
-{
-    m_liveShaderRevertPending = true;
-    m_liveShaderPending = false;
-}
-
-void TerrainRenderer::applyPendingLiveShader()
-{
-    if (m_liveShaderRevertPending)
+    if (!state)
     {
-        m_liveShaderRevertPending = false;
-        if (m_liveSimpleTerrainActive)
+        LOG_E("[live-shader] unsupported slot {}", slot);
+        return;
+    }
+
+    state->pendingBinPath = binPath;
+    state->pendingHash = hash;
+    state->pending = true;
+    state->revertPending = false;
+}
+
+void TerrainRenderer::requestRevertLiveShader(const std::string& slot)
+{
+    LiveShaderSlotState* state = nullptr;
+    if (slot == "terrain_simple.vertex")
+        state = &m_liveTerrainSimpleVertex;
+    else if (slot == "terrain_simple.fragment")
+        state = &m_liveTerrainSimpleFragment;
+    else if (slot == "overlay_max_elevation.compute")
+        state = &m_liveOverlayMaxElevationCompute;
+
+    if (!state)
+    {
+        LOG_E("[live-shader] unsupported revert slot {}", slot);
+        return;
+    }
+
+    state->pending = false;
+    state->revertPending = true;
+}
+
+bool TerrainRenderer::rebuildLiveTerrainSimpleProgram()
+{
+    if (!bgfx::isValid(m_originalSimpleTerrainProgram))
+    {
+        m_originalSimpleTerrainProgram = m_programsSimpleDraw[types::PROGRAM_TERRAIN];
+    }
+
+    if (!m_liveTerrainSimpleVertex.active && !m_liveTerrainSimpleFragment.active)
+    {
+        if (bgfx::isValid(m_programsSimpleDraw[types::PROGRAM_TERRAIN]) &&
+            m_programsSimpleDraw[types::PROGRAM_TERRAIN].idx != m_originalSimpleTerrainProgram.idx)
         {
-            if (bgfx::isValid(m_programsSimpleDraw[types::PROGRAM_TERRAIN]))
-            {
-                bgfx::destroy(m_programsSimpleDraw[types::PROGRAM_TERRAIN]);
-            }
-            m_programsSimpleDraw[types::PROGRAM_TERRAIN] = m_originalSimpleTerrainProgram;
-            m_originalSimpleTerrainProgram = BGFX_INVALID_HANDLE;
-            m_liveSimpleTerrainActive = false;
-            m_liveShaderHash.clear();
-            m_liveShaderBinPath.clear();
-            m_liveShaderLastError.clear();
-            LOG_I("[live-shader] reverted terrain_simple.fragment to stock program");
+            bgfx::destroy(m_programsSimpleDraw[types::PROGRAM_TERRAIN]);
+        }
+        m_programsSimpleDraw[types::PROGRAM_TERRAIN] = m_originalSimpleTerrainProgram;
+        m_originalSimpleTerrainProgram = BGFX_INVALID_HANDLE;
+        return true;
+    }
+
+    std::string error;
+    bgfx::ShaderHandle vsh = BGFX_INVALID_HANDLE;
+    bgfx::ShaderHandle fsh = BGFX_INVALID_HANDLE;
+
+    if (m_liveTerrainSimpleVertex.active)
+    {
+        vsh = loadShaderBinaryFile(m_liveTerrainSimpleVertex.activeBinPath, error);
+        if (!bgfx::isValid(vsh))
+        {
+            m_liveTerrainSimpleVertex.lastError = error;
+            return false;
+        }
+    }
+    else
+    {
+        vsh = loadShader("vs_terrain_simple");
+        if (!bgfx::isValid(vsh))
+        {
+            m_liveTerrainSimpleVertex.lastError = "failed to load stock vertex shader vs_terrain_simple";
+            return false;
         }
     }
 
-    if (!m_liveShaderPending)
-        return;
-
-    m_liveShaderPending = false;
-    m_liveShaderLastError.clear();
-
-    std::string error;
-    bgfx::ShaderHandle vsh = loadShader("vs_terrain_simple");
-    if (!bgfx::isValid(vsh))
+    if (m_liveTerrainSimpleFragment.active)
     {
-        m_liveShaderLastError = "failed to load stock vertex shader vs_terrain_simple";
-        LOG_E("[live-shader] {}", m_liveShaderLastError);
-        return;
+        fsh = loadShaderBinaryFile(m_liveTerrainSimpleFragment.activeBinPath, error);
+        if (!bgfx::isValid(fsh))
+        {
+            bgfx::destroy(vsh);
+            m_liveTerrainSimpleFragment.lastError = error;
+            return false;
+        }
     }
-
-    bgfx::ShaderHandle fsh = loadShaderBinaryFile(m_pendingLiveShaderBinPath, error);
-    if (!bgfx::isValid(fsh))
+    else
     {
-        bgfx::destroy(vsh);
-        m_liveShaderLastError = error;
-        LOG_E("[live-shader] {}", m_liveShaderLastError);
-        return;
+        fsh = loadShader("fs_terrain_simple");
+        if (!bgfx::isValid(fsh))
+        {
+            bgfx::destroy(vsh);
+            m_liveTerrainSimpleFragment.lastError = "failed to load stock fragment shader fs_terrain_simple";
+            return false;
+        }
     }
 
     bgfx::ProgramHandle program = bgfx::createProgram(vsh, fsh, true);
     if (!bgfx::isValid(program))
     {
-        m_liveShaderLastError = "bgfx::createProgram failed for live terrain_simple.fragment";
-        LOG_E("[live-shader] {}", m_liveShaderLastError);
-        return;
+        m_liveTerrainSimpleVertex.lastError = "bgfx::createProgram failed for live terrain_simple program";
+        m_liveTerrainSimpleFragment.lastError = "bgfx::createProgram failed for live terrain_simple program";
+        return false;
     }
 
-    if (!m_liveSimpleTerrainActive)
-    {
-        m_originalSimpleTerrainProgram = m_programsSimpleDraw[types::PROGRAM_TERRAIN];
-    }
-    else if (bgfx::isValid(m_programsSimpleDraw[types::PROGRAM_TERRAIN]))
+    if (bgfx::isValid(m_programsSimpleDraw[types::PROGRAM_TERRAIN]) &&
+        (!bgfx::isValid(m_originalSimpleTerrainProgram) ||
+         m_programsSimpleDraw[types::PROGRAM_TERRAIN].idx != m_originalSimpleTerrainProgram.idx))
     {
         bgfx::destroy(m_programsSimpleDraw[types::PROGRAM_TERRAIN]);
     }
-
     m_programsSimpleDraw[types::PROGRAM_TERRAIN] = program;
-    m_liveSimpleTerrainActive = true;
-    m_liveShaderHash = m_pendingLiveShaderHash;
-    m_liveShaderBinPath = m_pendingLiveShaderBinPath;
-    LOG_I("[live-shader] applied terrain_simple.fragment hash={}", m_liveShaderHash);
+    return true;
+}
+
+void TerrainRenderer::applyPendingLiveShader()
+{
+    auto applyTerrainStage = [this](const char* slot, LiveShaderSlotState& state) {
+        if (state.revertPending)
+        {
+            state.revertPending = false;
+            state.active = false;
+            state.activeHash.clear();
+            state.activeBinPath.clear();
+            state.lastError.clear();
+            if (rebuildLiveTerrainSimpleProgram())
+                LOG_I("[live-shader] reverted {}", slot);
+            else
+                LOG_E("[live-shader] failed to rebuild terrain program while reverting {}", slot);
+        }
+
+        if (!state.pending)
+            return;
+
+        state.pending = false;
+        state.active = true;
+        state.activeHash = state.pendingHash;
+        state.activeBinPath = state.pendingBinPath;
+        state.lastError.clear();
+        if (rebuildLiveTerrainSimpleProgram())
+        {
+            LOG_I("[live-shader] applied {} hash={}", slot, state.activeHash);
+            return;
+        }
+
+        state.active = false;
+        LOG_E("[live-shader] {}", state.lastError);
+        rebuildLiveTerrainSimpleProgram();
+    };
+
+    applyTerrainStage("terrain_simple.vertex", m_liveTerrainSimpleVertex);
+    applyTerrainStage("terrain_simple.fragment", m_liveTerrainSimpleFragment);
+
+    LiveShaderSlotState& compute = m_liveOverlayMaxElevationCompute;
+    if (compute.revertPending)
+    {
+        compute.revertPending = false;
+        if (compute.active)
+        {
+            if (bgfx::isValid(m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION]))
+                bgfx::destroy(m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION]);
+            m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION] = m_originalOverlayMaxElevationProgram;
+            m_originalOverlayMaxElevationProgram = BGFX_INVALID_HANDLE;
+            compute = LiveShaderSlotState{};
+            LOG_I("[live-shader] reverted overlay_max_elevation.compute");
+        }
+    }
+
+    if (compute.pending)
+    {
+        compute.pending = false;
+        compute.lastError.clear();
+
+        if (RenderDevice::renderCaps().noCompute())
+        {
+            compute.lastError = "compute shader live slot is unavailable in no-compute render tier";
+            LOG_E("[live-shader] {}", compute.lastError);
+            return;
+        }
+
+        std::string error;
+        bgfx::ShaderHandle csh = loadShaderBinaryFile(compute.pendingBinPath, error);
+        if (!bgfx::isValid(csh))
+        {
+            compute.lastError = error;
+            LOG_E("[live-shader] {}", compute.lastError);
+            return;
+        }
+
+        bgfx::ProgramHandle program = bgfx::createProgram(csh, true);
+        if (!bgfx::isValid(program))
+        {
+            compute.lastError = "bgfx::createProgram failed for live overlay_max_elevation.compute";
+            LOG_E("[live-shader] {}", compute.lastError);
+            return;
+        }
+
+        if (!compute.active)
+            m_originalOverlayMaxElevationProgram = m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION];
+        else if (bgfx::isValid(m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION]))
+            bgfx::destroy(m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION]);
+
+        m_programsCompute[types::PROGRAM_OVERLAY_MAX_ELEVATION] = program;
+        compute.active = true;
+        compute.activeHash = compute.pendingHash;
+        compute.activeBinPath = compute.pendingBinPath;
+        LOG_I("[live-shader] applied overlay_max_elevation.compute hash={}", compute.activeHash);
+    }
 }
 
 nlohmann::json TerrainRenderer::liveShaderSnapshot() const
 {
+    auto slotJson = [](const char* name, const LiveShaderSlotState& state) {
+        return nlohmann::json{
+            {"slot", name},
+            {"active", state.active},
+            {"activeHash", state.activeHash},
+            {"activeBinPath", state.activeBinPath},
+            {"pending", state.pending},
+            {"revertPending", state.revertPending},
+            {"lastError", state.lastError}
+        };
+    };
+
+    nlohmann::json slots = nlohmann::json::array({
+        slotJson("terrain_simple.vertex", m_liveTerrainSimpleVertex),
+        slotJson("terrain_simple.fragment", m_liveTerrainSimpleFragment),
+        slotJson("overlay_max_elevation.compute", m_liveOverlayMaxElevationCompute)
+    });
+
+    nlohmann::json activeSlots = nlohmann::json::array();
+    std::string firstActiveSlot;
+    std::string firstActiveHash;
+    std::string firstActiveBinPath;
+    for (const auto& slot : slots)
+    {
+        if (slot.value("active", false))
+        {
+            activeSlots.push_back(slot["slot"]);
+            if (firstActiveSlot.empty())
+            {
+                firstActiveSlot = slot.value("slot", std::string{});
+                firstActiveHash = slot.value("activeHash", std::string{});
+                firstActiveBinPath = slot.value("activeBinPath", std::string{});
+            }
+        }
+    }
+
+    const bool pending = m_liveTerrainSimpleVertex.pending ||
+                         m_liveTerrainSimpleFragment.pending ||
+                         m_liveOverlayMaxElevationCompute.pending;
+    const bool revertPending = m_liveTerrainSimpleVertex.revertPending ||
+                               m_liveTerrainSimpleFragment.revertPending ||
+                               m_liveOverlayMaxElevationCompute.revertPending;
+
     return {
         {"enabled", true},
-        {"supportedSlots", {"terrain_simple.fragment"}},
-        {"active", m_liveSimpleTerrainActive},
-        {"activeSlot", m_liveSimpleTerrainActive ? "terrain_simple.fragment" : ""},
-        {"activeHash", m_liveShaderHash},
-        {"activeBinPath", m_liveShaderBinPath},
-        {"pending", m_liveShaderPending},
-        {"revertPending", m_liveShaderRevertPending},
-        {"lastError", m_liveShaderLastError}
+        {"supportedSlots", {"terrain_simple.vertex", "terrain_simple.fragment", "overlay_max_elevation.compute"}},
+        {"active", !activeSlots.empty()},
+        {"activeSlot", firstActiveSlot},
+        {"activeHash", firstActiveHash},
+        {"activeBinPath", firstActiveBinPath},
+        {"activeSlots", activeSlots},
+        {"slots", slots},
+        {"pending", pending},
+        {"revertPending", revertPending},
+        {"lastError", ""}
     };
 }
 

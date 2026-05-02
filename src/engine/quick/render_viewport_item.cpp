@@ -192,9 +192,11 @@ void RenderViewportRenderer::synchronize(QQuickFramebufferObject* qitem)
 
     if (m_item->m_liveShaderPending)
     {
-        m_scene->requestLiveTerrainSimpleFragment(
+        m_scene->requestLiveShader(
+            m_item->m_pendingLiveShaderSlot.toStdString(),
             m_item->m_pendingLiveShaderBinPath.toStdString(),
             m_item->m_pendingLiveShaderHash.toStdString());
+        m_item->m_pendingLiveShaderSlot.clear();
         m_item->m_pendingLiveShaderBinPath.clear();
         m_item->m_pendingLiveShaderHash.clear();
         m_item->m_liveShaderPending = false;
@@ -202,7 +204,8 @@ void RenderViewportRenderer::synchronize(QQuickFramebufferObject* qitem)
 
     if (m_item->m_liveShaderRevertPending)
     {
-        m_scene->requestRevertLiveTerrainSimpleFragment();
+        m_scene->requestRevertLiveShader(m_item->m_pendingLiveShaderRevertSlot.toStdString());
+        m_item->m_pendingLiveShaderRevertSlot.clear();
         m_item->m_liveShaderRevertPending = false;
     }
 }
@@ -666,19 +669,22 @@ QQuickFramebufferObject::Renderer* RenderViewportItem::createRenderer() const
     return new RenderViewportRenderer(const_cast<RenderViewportItem*>(this));
 }
 
-void RenderViewportItem::requestLiveTerrainSimpleFragment(const QString& binPath,
-                                                     const QString& hash)
+void RenderViewportItem::requestLiveShader(const QString& slot,
+                                           const QString& binPath,
+                                           const QString& hash)
 {
     QMutexLocker locker(&m_lock);
+    m_pendingLiveShaderSlot = slot;
     m_pendingLiveShaderBinPath = binPath;
     m_pendingLiveShaderHash = hash;
     m_liveShaderPending = true;
     update();
 }
 
-void RenderViewportItem::requestRevertLiveTerrainSimpleFragment()
+void RenderViewportItem::requestRevertLiveShader(const QString& slot)
 {
     QMutexLocker locker(&m_lock);
+    m_pendingLiveShaderRevertSlot = slot;
     m_liveShaderRevertPending = true;
     update();
 }

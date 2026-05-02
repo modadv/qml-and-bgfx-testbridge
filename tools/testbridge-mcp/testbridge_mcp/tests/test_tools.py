@@ -160,7 +160,9 @@ async def test_shader_revert(client):
 @pytest.mark.asyncio
 async def test_shader_list(client):
     result = await srv.shader_list()
+    assert "terrain_simple.vertex" in result["supportedSlots"]
     assert "terrain_simple.fragment" in result["supportedSlots"]
+    assert "overlay_max_elevation.compute" in result["supportedSlots"]
 
 
 @pytest.mark.asyncio
