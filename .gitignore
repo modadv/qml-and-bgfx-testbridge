@@ -1,6 +1,7 @@
 # Build outputs
 .build/
 .build-release/
+.build-ubuntu-release/
 .install-testbridge/
 build/
 out/

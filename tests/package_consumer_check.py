@@ -40,7 +40,11 @@ def main() -> int:
     run(["cmake", "--install", str(build_dir), "--config", args.config, "--prefix", str(install_dir)], ROOT)
 
     prefix_parts = [str(install_dir)]
-    generators = build_dir / "generators"
+    generator_candidates = [
+        build_dir / "generators",
+        build_dir / args.config / "generators",
+    ]
+    generators = next((path for path in generator_candidates if path.exists()), generator_candidates[0])
     if generators.exists():
         prefix_parts.append(str(generators))
     qt_bin = os.environ.get("TESTBRIDGE_QT_BIN")
@@ -53,6 +57,7 @@ def main() -> int:
         str(ROOT / "tests/cmake_package_consumer"),
         "-B",
         str(consumer_build),
+        f"-DCMAKE_BUILD_TYPE={args.config}",
         f"-DCMAKE_PREFIX_PATH={';'.join(prefix_parts)}",
     ]
     toolchain = generators / "conan_toolchain.cmake"

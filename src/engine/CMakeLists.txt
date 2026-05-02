@@ -223,13 +223,7 @@ target_compile_definitions(engine_core PUBLIC
     $<$<CONFIG:Release>:BX_CONFIG_DEBUG=0>
 )
 
-if(WIN32)
-    target_compile_definitions(engine_core PRIVATE BX_PLATFORM_WINDOWS=1 _WIN32 _WIN64 __STDC_FORMAT_MACROS)
-elseif(APPLE)
-    target_compile_definitions(engine_core PRIVATE BX_PLATFORM_OSX=1 __APPLE__)
-elseif(UNIX)
-    target_compile_definitions(engine_core PRIVATE BX_PLATFORM_LINUX=1 __linux__)
-endif()
+target_compile_definitions(engine_core PRIVATE __STDC_FORMAT_MACROS)
 
 target_link_libraries(engine_core PUBLIC
     engine_terrain_assets
@@ -250,8 +244,12 @@ if(TARGET bimg_decode)
     target_link_libraries(engine_core PUBLIC bimg_decode)
 endif()
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND TARGET Qt5::X11Extras)
     target_link_libraries(engine_core PUBLIC Qt5::X11Extras)
+    target_compile_definitions(engine_core PRIVATE ENGINE_HAS_QX11INFO=1)
+elseif(UNIX AND NOT APPLE AND TARGET Qt5::GuiPrivate)
+    target_link_libraries(engine_core PRIVATE Qt5::GuiPrivate)
+    target_compile_definitions(engine_core PRIVATE ENGINE_HAS_QPA_NATIVE_INTERFACE=1)
 endif()
 
 set(ENGINE_MESHOPTIMIZER_TARGET "")

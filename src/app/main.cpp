@@ -482,9 +482,16 @@ private:
 #else
         const QString exe = QStringLiteral("shaderc");
 #endif
-        const QString buildCandidate = buildDir(QStringLiteral("external/bgfx.cmake/Release/") + exe);
-        if (QFileInfo::exists(buildCandidate))
-            return buildCandidate;
+        const QStringList buildCandidates = {
+            buildDir(QStringLiteral("external/bgfx.cmake/cmake/bgfx/") + exe),
+            buildDir(QStringLiteral("external/bgfx.cmake/Release/") + exe),
+            buildDir(QStringLiteral("external/bgfx.cmake/Debug/") + exe),
+        };
+        for (const QString& candidate : buildCandidates)
+        {
+            if (QFileInfo::exists(candidate))
+                return candidate;
+        }
         return QDir(QCoreApplication::applicationDirPath()).filePath("../../external/bgfx.cmake/Release/" + exe);
     }
 

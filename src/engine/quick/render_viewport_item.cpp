@@ -15,8 +15,13 @@
 #include <QPointer>
 #include <QSize>
 #include <QByteArray>
-#if defined(Q_OS_LINUX)
+#if defined(Q_OS_LINUX) && defined(ENGINE_HAS_QX11INFO)
 #include <QX11Info>
+#elif defined(Q_OS_LINUX) && defined(ENGINE_HAS_QPA_NATIVE_INTERFACE)
+#include <QGuiApplication>
+#include <qpa/qplatformnativeinterface.h>
+#endif
+#if defined(Q_OS_LINUX)
 #include <GL/glx.h>
 #endif
 #include <algorithm>
@@ -376,7 +381,14 @@ bool RenderViewportRenderer::ensureSurface(const QSize& sz)
     {
         bgfx::PlatformData pd{};
 #if defined(Q_OS_LINUX)
+#if defined(ENGINE_HAS_QX11INFO)
         pd.ndt          = QX11Info::display();
+#elif defined(ENGINE_HAS_QPA_NATIVE_INTERFACE)
+        QPlatformNativeInterface* nativeInterface = QGuiApplication::platformNativeInterface();
+        pd.ndt = nativeInterface ? nativeInterface->nativeResourceForIntegration("display") : nullptr;
+#else
+        pd.ndt          = nullptr;
+#endif
         pd.context      = reinterpret_cast<void*>(glXGetCurrentContext());
 #else
         pd.ndt          = nullptr;

@@ -34,7 +34,7 @@ find_package(Qt5 5.15 REQUIRED COMPONENTS
     Core Gui Qml Quick QuickControls2 Network OpenGL Test WebSockets
 )
 if(UNIX AND NOT APPLE)
-    find_package(Qt5 5.15 REQUIRED COMPONENTS X11Extras)
+    find_package(Qt5 5.15 QUIET COMPONENTS X11Extras)
 endif()
 
 find_package(spdlog REQUIRED CONFIG)
