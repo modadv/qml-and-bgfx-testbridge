@@ -252,7 +252,6 @@ real GUI behavior is covered by `tests/smoke_testbridge_lab.py`.
 
 ```text
 common/bgfx_utils.cpp
-common/resource_arena.cpp
 terrain/render_device.cpp
 terrain/terrain_cpu_compute.cpp
 terrain/performance_monitor.cpp
@@ -293,7 +292,7 @@ architecture, chosen to fit the C++14 / GL3.3 / GLES3.0 compatibility floor.
 
 | Concern | Mechanism | Location |
 |---|---|---|
-| Resource lifetime | `DeferredDeleteQueue` drives every `bgfx::destroy` off bgfx's real frame fence (`enqueue(destroy, safeAfterFrame)` + `collect(retiredFrameId)` once per `endFrame`, `flushAll()` on shutdown/surface destroy). Replaces 13 hand-tuned "wait N frames" delays and folds the two former global readback deques into instance-owned queues, killing the leak + 32-bit frame-id wraparound class. | `common/resource_arena.{h,cpp}`, owned by `RenderDevice` |
+| Resource lifetime | `DeferredDeleteQueue` drives every `bgfx::destroy` off bgfx's real frame fence (`enqueue(destroy, safeAfterFrame)` + `collect(retiredFrameId)` once per `endFrame`, `flushAll()` on shutdown/surface destroy). Replaces 13 hand-tuned "wait N frames" delays and folds the two former global readback deques into instance-owned queues, killing the leak + 32-bit frame-id wraparound class. | `common/resource_arena.h` (header-only), owned by `RenderDevice` |
 | Idle cost | Render-on-demand: the viewport only calls `update()` when the scene reports it must keep producing frames. `IRenderContent::needsContinuousUpdate()` ORs renderer settling, pending auto-fit, in-flight readbacks, and camera view-dirty; otherwise the loop idles instead of busy-spinning. | `quick/render_viewport_item.cpp`, `quick/render_scene.h` |
 | Present seam | `ReadbackPresenter` owns the `ViewSurface`, the readback ring, and the readback→`glTexSubImage2D` upload. The viewport renderer is reduced to orchestration and talks to content through `IRenderContent`. | `quick/readback_presenter.{h,cpp}`, `quick/render_content.h` |
 | Submit safety | Programs/handles are guarded with `bgfx::isValid` before `submit`/`dispatch`. | terrain render modules |
