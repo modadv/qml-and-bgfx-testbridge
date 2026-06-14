@@ -262,7 +262,6 @@ TerrainRenderer::TerrainRenderer()
 {
     for (uint32_t i = 0; i < types::TEXTURE_COUNT; ++i) {
         m_textures[i] = BGFX_INVALID_HANDLE;
-        m_texturesBackup[i] = BGFX_INVALID_HANDLE;
     }
     // Initialize invalid handles
     for (uint32_t i = 0; i < types::PROGRAM_COUNT; ++i) {
@@ -403,9 +402,6 @@ void TerrainRenderer::destroyAllResources()
             if (bgfx::isValid(m_textures[i])) {
                 bgfx::destroy(m_textures[i]);
             }
-            if (bgfx::isValid(m_texturesBackup[i])) {
-                bgfx::destroy(m_texturesBackup[i]);
-            }
         }
 
         {
@@ -540,45 +536,37 @@ void TerrainRenderer::destroyAllResources()
         bimg::imageFree(m_dmap);
         m_dmap = nullptr;
     }
-
-    m_textureSwapPending = false;
-    m_textureSwapDelay = 0;
 }
 
-void TerrainRenderer::retireTexture(uint32_t textureIndex)
+void TerrainRenderer::retireTexture(uint32_t textureIndex, uint32_t framesToWait)
 {
     if (textureIndex >= types::TEXTURE_COUNT) return;
 
     bgfx::TextureHandle current = m_textures[textureIndex];
     if (!bgfx::isValid(current)) return;
 
-    destroyBackupTexture(textureIndex);
-
-    m_texturesBackup[textureIndex] = current;
     m_textures[textureIndex] = BGFX_INVALID_HANDLE;
-    m_textureSwapPending = true;
-    m_textureSwapDelay = 5;
+    scheduleTextureDestroy(current, framesToWait);
 }
 
-void TerrainRenderer::destroyBackupTexture(uint32_t textureIndex)
+void TerrainRenderer::scheduleTextureDestroy(bgfx::TextureHandle handle, uint32_t framesToWait)
 {
-    if (textureIndex >= types::TEXTURE_COUNT) return;
-    if (!bgfx::isValid(m_texturesBackup[textureIndex])) return;
+    if (!bgfx::isValid(handle)) return;
 
-    bgfx::destroy(m_texturesBackup[textureIndex]);
-    m_texturesBackup[textureIndex] = BGFX_INVALID_HANDLE;
-}
+    const uint32_t lastFrame = RenderDevice::instance().lastFrameId();
+    if (lastFrame == 0)
+    {
+        // Nothing submitted yet, so the handle was never referenced by an
+        // in-flight frame — safe to destroy immediately.
+        bgfx::destroy(handle);
+        return;
+    }
 
-// Same as destroyBackupTexture but assumes m_cacheMutex is already held
-// by the caller. Used by tryLoadFromCache, which wraps its cache access
-// in a single lock_guard.
-void TerrainRenderer::destroyBackupTextureLocked(uint32_t textureIndex)
-{
-    if (textureIndex >= types::TEXTURE_COUNT) return;
-    if (!bgfx::isValid(m_texturesBackup[textureIndex])) return;
-
-    bgfx::destroy(m_texturesBackup[textureIndex]);
-    m_texturesBackup[textureIndex] = BGFX_INVALID_HANDLE;
+    // bgfx::destroy is itself deferred until the GPU is done; the extra fence
+    // gate (lastFrame + framesToWait) preserves the prior swap timing so the
+    // headless async readback path can't capture a half-swapped frame.
+    RenderDevice::instance().deferUntilFrameRetired(
+        [handle]() { bgfx::destroy(handle); }, lastFrame + framesToWait);
 }
 
 void TerrainRenderer::invalidateAllHandles()
@@ -587,7 +575,6 @@ void TerrainRenderer::invalidateAllHandles()
 
     for (uint32_t i = 0; i < types::TEXTURE_COUNT; ++i) {
         m_textures[i] = BGFX_INVALID_HANDLE;
-        m_texturesBackup[i] = BGFX_INVALID_HANDLE;
     }
 
     {
@@ -735,16 +722,6 @@ bool TerrainRenderer::update(float deltaTime, const float* viewMtx, const float*
         processAsyncUploads();
     }
 
-    if (m_textureSwapPending && m_textureSwapDelay > 0) {
-        m_textureSwapDelay--;
-        if (m_textureSwapDelay == 0) {
-            for (int i = 0; i < types::TEXTURE_COUNT; ++i) {
-                destroyBackupTexture(uint32_t(i));
-            }
-            m_textureSwapPending = false;
-        }
-    }
-
     const uint8_t viewId = m_viewId;
 
     bgfx::setViewFrameBuffer(viewId, m_frameBuffer);
@@ -803,9 +780,6 @@ bool TerrainRenderer::update(float deltaTime, const float* viewMtx, const float*
         cpuRegenerateSmap();
     }
     m_currentPerfSample.smapMs = std::max(m_cpuSmapGenTime, m_gpuSmapGenTime);
-
-    if (m_deferSmapUseFrames > 0)
-        --m_deferSmapUseFrames;
 
     updateOverlayGpuData();
 
@@ -2059,13 +2033,7 @@ void TerrainRenderer::loadSmapTexture() {
         BGFX_TEXTURE_NONE, mem
     );
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_SMAP])) {
-        destroyBackupTexture(types::TEXTURE_SMAP);
-        m_texturesBackup[types::TEXTURE_SMAP] = m_textures[types::TEXTURE_SMAP];
-        m_textureSwapPending = true;
-        m_textureSwapDelay = 5;
-    }
-
+    scheduleTextureDestroy(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
     m_textures[types::TEXTURE_SMAP] = newSmapTexture;
 
     int64_t endTime = bx::getHPCounter();
@@ -2089,13 +2057,7 @@ void TerrainRenderer::loadSmapTextureGPU() {
             BGFX_TEXTURE_NONE, mem
         );
 
-        if (bgfx::isValid(m_textures[types::TEXTURE_SMAP])) {
-            destroyBackupTexture(types::TEXTURE_SMAP);
-            m_texturesBackup[types::TEXTURE_SMAP] = m_textures[types::TEXTURE_SMAP];
-            m_textureSwapPending = true;
-            m_textureSwapDelay = 5;
-        }
-
+        scheduleTextureDestroy(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
         m_textures[types::TEXTURE_SMAP] = newSmapTexture;
         m_gpuSmapGenTime = 0.0f;
         return;
@@ -2152,16 +2114,12 @@ void TerrainRenderer::loadSmapTextureGPU() {
     const uint8_t viewId = m_viewId;
     bgfx::dispatch(viewId, m_programsCompute[types::PROGRAM_GENERATE_SMAP], groupsX, groupsY, 1);
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_SMAP])) {
-        destroyBackupTexture(types::TEXTURE_SMAP);
-        m_texturesBackup[types::TEXTURE_SMAP] = m_textures[types::TEXTURE_SMAP];
-    }
-
+    scheduleTextureDestroy(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
     m_textures[types::TEXTURE_SMAP] = newSmapTexture;
     
-    m_textureSwapPending = true;
-    m_textureSwapDelay = 5;
-    m_deferSmapUseFrames = 3;
+    // The real SMap was just written by a GPU compute dispatch; sample the dummy
+    // until that write has been retired (fence), then switch to the real SMap.
+    m_smapReadyFrame = RenderDevice::instance().lastFrameId() + kSmapDeferFrames;
 
     int64_t endTime = bx::getHPCounter();
     m_gpuSmapGenTime = float((endTime - startTime) / double(bx::getHPFrequency()) * 1000.0);
@@ -2182,13 +2140,7 @@ void TerrainRenderer::loadDiffuseTexture() {
             BGFX_TEXTURE_NONE, mem
         );
         
-        if (bgfx::isValid(m_textures[types::TEXTURE_DIFFUSE])) {
-            destroyBackupTexture(types::TEXTURE_DIFFUSE);
-            m_texturesBackup[types::TEXTURE_DIFFUSE] = m_textures[types::TEXTURE_DIFFUSE];
-            m_textureSwapPending = true;
-            m_textureSwapDelay = 5;
-        }
-
+        scheduleTextureDestroy(m_textures[types::TEXTURE_DIFFUSE], kTextureRetireFrames);
         m_textures[types::TEXTURE_DIFFUSE] = newDiffuseTexture;
         m_diffuseUvMode = DiffuseUvMode::None;
         return;
@@ -2216,13 +2168,7 @@ void TerrainRenderer::loadDiffuseTexture() {
         );
     }
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_DIFFUSE])) {
-        destroyBackupTexture(types::TEXTURE_DIFFUSE);
-        m_texturesBackup[types::TEXTURE_DIFFUSE] = m_textures[types::TEXTURE_DIFFUSE];
-        m_textureSwapPending = true;
-        m_textureSwapDelay = 5;
-    }
-
+    scheduleTextureDestroy(m_textures[types::TEXTURE_DIFFUSE], kTextureRetireFrames);
     m_textures[types::TEXTURE_DIFFUSE] = newDiffuseTexture;
 
     uint16_t diffuseW = 0;
@@ -2508,7 +2454,7 @@ void TerrainRenderer::renderTerrain()
                      BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
 
     // SMap
-    if (m_deferSmapUseFrames > 0 && bgfx::isValid(m_dummySmap))
+    if (RenderDevice::instance().lastFrameId() < m_smapReadyFrame && bgfx::isValid(m_dummySmap))
     {
         bgfx::setTexture(1,
                          m_samplers[types::TERRAIN_SMAP_SAMPLER],
@@ -3816,12 +3762,7 @@ bool TerrainRenderer::dispatchGpuHeightfieldDecode(HeightfieldTextureLoader::Loa
     bgfx::destroy(minmaxIn);
     bgfx::destroy(rawTexture);
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_DMAP])) {
-        destroyBackupTexture(types::TEXTURE_DMAP);
-        m_texturesBackup[types::TEXTURE_DMAP] = m_textures[types::TEXTURE_DMAP];
-        m_textureSwapPending = true;
-        m_textureSwapDelay = 60;
-    }
+    scheduleTextureDestroy(m_textures[types::TEXTURE_DMAP], kDmapRetireFrames);
 
     const uint16_t prevWidth = m_heightfieldWidth;
     const uint16_t prevHeight = m_heightfieldHeight;
@@ -3941,12 +3882,7 @@ void TerrainRenderer::processAsyncUploads()
               task.width, task.height, uint32_t(task.data.size() * sizeof(uint16_t)));
     }
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_DMAP])) {
-        destroyBackupTexture(types::TEXTURE_DMAP);
-        m_texturesBackup[types::TEXTURE_DMAP] = m_textures[types::TEXTURE_DMAP];
-        m_textureSwapPending = true;
-        m_textureSwapDelay = 60;
-    }
+    scheduleTextureDestroy(m_textures[types::TEXTURE_DMAP], kDmapRetireFrames);
 
     m_textures[types::TEXTURE_DMAP] = newDmapTexture;
     
@@ -4031,12 +3967,7 @@ bool TerrainRenderer::tryLoadFromCache(const std::string& path)
     CachedTexture& cached = it->second;
     cached.lastAccessTime = std::chrono::steady_clock::now().time_since_epoch().count();
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_DMAP])) {
-        destroyBackupTextureLocked(types::TEXTURE_DMAP);
-        m_texturesBackup[types::TEXTURE_DMAP] = m_textures[types::TEXTURE_DMAP];
-        m_textureSwapPending = true;
-        m_textureSwapDelay = 60;
-    }
+    scheduleTextureDestroy(m_textures[types::TEXTURE_DMAP], kDmapRetireFrames);
 
     // Recreate GPU textures from CPU data; bgfx handles are never cached.
     auto* mem = bgfx::copy(cached.cpuData.data(), uint32_t(cached.cpuData.size() * sizeof(uint16_t)));
@@ -4337,13 +4268,7 @@ void TerrainRenderer::cpuRegenerateSmap()
                               m_heightfieldWidth, m_heightfieldHeight, mem);
     }
 
-    if (bgfx::isValid(m_textures[types::TEXTURE_SMAP]))
-    {
-        destroyBackupTexture(types::TEXTURE_SMAP);
-        m_texturesBackup[types::TEXTURE_SMAP] = m_textures[types::TEXTURE_SMAP];
-        m_textureSwapPending = true;
-        m_textureSwapDelay = 5;
-    }
+    scheduleTextureDestroy(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
     m_textures[types::TEXTURE_SMAP] = newSmap;
     m_smapNeedsRegen = false;
     m_cpuSmapGenTime = 0.0f;
@@ -4445,8 +4370,7 @@ nlohmann::json TerrainRenderer::resourcesSnapshot() const
             {"slot", i},
             {"name", kTextureNames[i]},
             {"valid", valid},
-            {"handle", m_textures[i].idx},
-            {"backupValid", bgfx::isValid(m_texturesBackup[i])}
+            {"handle", m_textures[i].idx}
         });
     }
 
