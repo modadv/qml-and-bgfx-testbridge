@@ -190,6 +190,7 @@ add_library(engine_core STATIC
     terrain/terrain_renderer.cpp
     terrain/terrain_renderer_simple.cpp
     terrain/terrain_renderer_overlay.cpp
+    terrain/terrain_renderer_heightfield.cpp
     terrain/terrain_patch_tables.cpp
     terrain/render_capabilities.cpp
     terrain/terrain_uniforms.cpp
