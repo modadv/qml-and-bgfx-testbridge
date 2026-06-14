@@ -324,17 +324,10 @@ public:
     bool ensureValidResources();
 
     void destroyAllResources();
-    // Texture-retire fence latencies (frames after a swap before the old handle
-    // is destroyed). bgfx::destroy is already internally deferred until the GPU
-    // is done; these preserve the prior swap timing so the headless async
-    // readback path can't capture a half-swapped frame.
-    static constexpr uint32_t kTextureRetireFrames = 5;
-    static constexpr uint32_t kDmapRetireFrames    = 60;
-    static constexpr uint32_t kSmapDeferFrames     = 3;
-
-    void retireTexture(uint32_t textureIndex, uint32_t framesToWait = kTextureRetireFrames);
-    // Hand a texture handle to the device's fence-driven delete queue.
-    void scheduleTextureDestroy(bgfx::TextureHandle handle, uint32_t framesToWait);
+    // Schedule the old texture handle for destruction once the GPU has retired
+    // `framesToKeepOld` more frames (routed through RenderDevice's deferred-delete
+    // queue). Replaces the old backup-array + shared-frame-counter mechanism.
+    void deferDestroyTexture(bgfx::TextureHandle handle, uint32_t framesToKeepOld);
     void applyPendingLiveShader();
     nlohmann::json liveShaderSnapshot() const;
     // --- Members (unchanged) ---
@@ -347,7 +340,6 @@ public:
     bgfx::UniformHandle m_smapParamsHandle;
     bgfx::UniformHandle m_smapChunkParamsHandle;
     bgfx::UniformHandle m_diffuseUvParamsHandle = BGFX_INVALID_HANDLE;
-
     bgfx::DynamicIndexBufferHandle m_bufferSubd[2];
     bgfx::DynamicIndexBufferHandle m_bufferCulledSubd;
     bgfx::DynamicIndexBufferHandle m_bufferCounter;
@@ -359,9 +351,7 @@ public:
     bgfx::VertexLayout             m_instancedGeometryLayout;
     bgfx::IndirectBufferHandle     m_dispatchIndirect;
     bgfx::TextureHandle            m_dummySmap = BGFX_INVALID_HANDLE;
-    // Frame at/after which the freshly generated SMap is safe to sample (its
-    // GPU-compute write has been retired); until then sample m_dummySmap.
-    uint32_t                       m_smapReadyFrame = 0;
+    int                            m_deferSmapUseFrames = 0;
 
     bimg::ImageContainer* m_dmap = nullptr;
 
