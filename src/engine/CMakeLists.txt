@@ -188,6 +188,7 @@ add_library(engine_core STATIC
     terrain/terrain_cpu_compute.cpp
     terrain/performance_monitor.cpp
     terrain/terrain_renderer.cpp
+    terrain/terrain_renderer_simple.cpp
     terrain/terrain_patch_tables.cpp
     terrain/render_capabilities.cpp
     terrain/terrain_uniforms.cpp
