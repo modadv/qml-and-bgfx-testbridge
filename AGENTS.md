@@ -30,6 +30,22 @@ boundaries for Agent-driven development.
 - On visual changes, run smoke tests and update goldens only when the change is intended.
 - Preserve failure artifacts; they are the next Agent's debugging context.
 
+### Render path
+
+- Destroy bgfx resources through the `DeferredDeleteQueue`
+  (`src/engine/common/resource_arena.h`) — `enqueue(destroy, safeAfterFrame)`,
+  never a hand-counted "wait N frames" delay or a bare `bgfx::destroy` on a
+  resource that may still be in flight.
+- Keep the loop render-on-demand: signal continued frames through
+  `IRenderContent::needsContinuousUpdate()`, do not unconditionally `update()`.
+- The present/readback path lives in `ReadbackPresenter`; content renderers reach
+  the viewport through `IRenderContent` (`src/engine/quick/render_content.h`).
+- `TerrainRenderer` is split across `terrain_renderer{,_simple,_overlay,_heightfield,_shaders}.cpp`
+  (one class, declarations in `terrain_renderer.h`). Add a method to the module
+  matching its concern.
+- See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) "Render-path discipline" for
+  the full rationale.
+
 ## Key Workflows
 
 - UI work: `qml.find`, `qml.meta`, `qml.geometry`, `qml.tree`, `qml.click`.

@@ -1,6 +1,6 @@
 # TestBridge Lab Architecture
 
-Updated: 2026-05-01
+Updated: 2026-06-14
 
 This document describes the current implementation boundaries, runtime flow,
 verification paths, and known risks for this repository. It records current
@@ -252,15 +252,21 @@ real GUI behavior is covered by `tests/smoke_testbridge_lab.py`.
 
 ```text
 common/bgfx_utils.cpp
+common/resource_arena.cpp
 terrain/render_device.cpp
 terrain/terrain_cpu_compute.cpp
 terrain/performance_monitor.cpp
 terrain/terrain_renderer.cpp
+terrain/terrain_renderer_simple.cpp
+terrain/terrain_renderer_overlay.cpp
+terrain/terrain_renderer_heightfield.cpp
+terrain/terrain_renderer_shaders.cpp
 terrain/terrain_patch_tables.cpp
 terrain/render_capabilities.cpp
 terrain/terrain_uniforms.cpp
 quick/render_viewport_item.cpp
 quick/render_scene.cpp
+quick/readback_presenter.cpp
 quick/asset_fetch_service.cpp
 ```
 
@@ -268,15 +274,37 @@ Qt Quick integration:
 
 1. `RenderViewportItem` derives from `QQuickFramebufferObject`.
 2. QML properties synchronize into `RenderScene`.
-3. `RenderScene` owns camera, overlay, input, and renderer state.
+3. `RenderScene` owns camera, overlay, input, and renderer state, and presents
+   itself to the viewport through the `IRenderContent` interface
+   (`quick/render_content.h`) rather than being welded to `TerrainRenderer`.
 4. `RenderDevice` owns the global bgfx lifecycle, surfaces, views, render
-   targets, and readback resources.
+   targets, readback resources, and the deferred-delete queue (below).
 5. bgfx renders into an offscreen texture; the current path reads back and
    uploads into the Qt FBO texture.
 
 The readback/upload path is useful for a portable test framework, but it has
 latency and bandwidth costs. Production engines may replace it with shared GL
 textures, direct FBO integration, QRhi, or a scenegraph-native path.
+
+### Render-path discipline (2026 hardening)
+
+The render path follows the *disciplined* subset of a minimalist 2026 engine
+architecture, chosen to fit the C++14 / GL3.3 / GLES3.0 compatibility floor.
+
+| Concern | Mechanism | Location |
+|---|---|---|
+| Resource lifetime | `DeferredDeleteQueue` drives every `bgfx::destroy` off bgfx's real frame fence (`enqueue(destroy, safeAfterFrame)` + `collect(retiredFrameId)` once per `endFrame`, `flushAll()` on shutdown/surface destroy). Replaces 13 hand-tuned "wait N frames" delays and folds the two former global readback deques into instance-owned queues, killing the leak + 32-bit frame-id wraparound class. | `common/resource_arena.{h,cpp}`, owned by `RenderDevice` |
+| Idle cost | Render-on-demand: the viewport only calls `update()` when the scene reports it must keep producing frames. `IRenderContent::needsContinuousUpdate()` ORs renderer settling, pending auto-fit, in-flight readbacks, and camera view-dirty; otherwise the loop idles instead of busy-spinning. | `quick/render_viewport_item.cpp`, `quick/render_scene.h` |
+| Present seam | `ReadbackPresenter` owns the `ViewSurface`, the readback ring, and the readback→`glTexSubImage2D` upload. The viewport renderer is reduced to orchestration and talks to content through `IRenderContent`. | `quick/readback_presenter.{h,cpp}`, `quick/render_content.h` |
+| Submit safety | Programs/handles are guarded with `bgfx::isValid` before `submit`/`dispatch`. | terrain render modules |
+| Pass ordering | A minimal, linear, declarative frame-pass list (`engine::FramePassList`) records the fixed pass topology (decode → smap → overlay-max → terrain → axes → overlay-rects → present) with each pass's read/write set, validates producer-before-consumer ordering at init, and is reported under `render.resources.framePasses`. It is a *description*, not a scheduler — no DAG/aliasing/barriers. | `terrain/frame_graph.h` |
+
+The 4,500-line `TerrainRenderer` god class was split, as compiler/linker-verified
+verbatim translation-unit moves, into cohesive `.cpp` files for the same class:
+`terrain_renderer.cpp` (orchestration), `_simple` (NoCompute grid + CPU smap),
+`_overlay` (rects, picking, overlay-max readback), `_heightfield`
+(load/decode/cache), and `_shaders` (program load + live-shader reload). All
+member declarations remain in `terrain/terrain_renderer.h`.
 
 ## Verified Workflow
 

@@ -40,12 +40,27 @@ operational capabilities. Numeric handle IDs are acceptable as diagnostics.
 - buffer table
 - live shader state
 - resource validity flags
+- frame-pass list (`framePasses`): the ordered render passes with each pass's
+  read/write resource sets and a `valid` flag from producer-before-consumer
+  validation. This is a declarative description of pass ordering for
+  introspection, not a scheduler; see `terrain/frame_graph.h`.
 
 ## Threading Rule
 
 Collect renderer state at a safe point owned by the renderer, then let the RPC
 thread read the copied snapshot or ask the GUI thread for plain data. Do not let
 RPC handlers mutate bgfx directly.
+
+## Resource Lifetime and Present
+
+A portable provider should not hand-tune "wait N frames before destroy" delays.
+This host routes every `bgfx::destroy` through a `DeferredDeleteQueue` keyed on
+bgfx's real frame fence (`common/resource_arena.h`), collected once per frame and
+flushed on shutdown/surface teardown. Texture swaps become "bind new, enqueue
+old". The same fence drains readback rings, so there are no global leak-prone
+deques. The offscreen→Qt present path is isolated in `ReadbackPresenter`
+(`quick/readback_presenter.h`) behind the `IRenderContent` seam, so the content
+renderer and the present path can evolve independently.
 
 ## Live Shader Providers
 
