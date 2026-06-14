@@ -114,32 +114,16 @@ bool pointInQuad2D(float px, float py,
     return outU >= 0.0f && outU <= 1.0f && outV >= 0.0f && outV <= 1.0f;
 }
 
-std::mutex g_orphanedOverlayMutex;
-struct OrphanedOverlayReadback
-{
-    std::vector<float> data;
-    uint32_t submitFrame = std::numeric_limits<uint32_t>::max();
-};
-std::deque<OrphanedOverlayReadback> g_orphanedOverlayReads;
-
+// Keep an in-flight overlay-max readback buffer alive on the device's
+// fence-driven delete queue until bgfx retires the frame it was submitted in,
+// then free it (drained at shutdown). Replaces the old file-static orphan deque,
+// which leaked on shutdown and could mis-collect across frame-counter wraparound.
 void stashOverlayReadback(std::vector<float>&& data, uint32_t submitFrame)
 {
     if (data.empty())
         return;
-    std::lock_guard<std::mutex> lock(g_orphanedOverlayMutex);
-    g_orphanedOverlayReads.push_back({ std::move(data), submitFrame });
-}
-
-void releaseOverlayReadbacks(uint32_t currentFrame)
-{
-    if (currentFrame == std::numeric_limits<uint32_t>::max())
-        return;
-    std::lock_guard<std::mutex> lock(g_orphanedOverlayMutex);
-    while (!g_orphanedOverlayReads.empty()
-        && g_orphanedOverlayReads.front().submitFrame <= currentFrame)
-    {
-        g_orphanedOverlayReads.pop_front();
-    }
+    RenderDevice::instance().deferUntilFrameRetired(
+        [kept = std::move(data)]() {}, submitFrame);
 }
 
 uint32_t currentFrameId()
@@ -768,7 +752,8 @@ bool TerrainRenderer::update(float deltaTime, const float* viewMtx, const float*
     bgfx::setViewTransform(viewId, viewMtx, projMtx);
     bgfx::touch(viewId);
 
-    releaseOverlayReadbacks(currentFrameId());
+    // Overlay-max readbacks are released by the device's deferred-delete queue
+    // (collected inside RenderDevice::endFrame()).
 
     m_overlayTime += deltaTime;
 

@@ -30,29 +30,20 @@
 #include <mutex>
 
 namespace {
-std::mutex g_orphanedMutex;
-std::deque<PendingRead> g_orphanedReads;
-
-void stashOrphanedReads(std::deque<PendingRead>& pending)
+// Hand in-flight readbacks to the device's fence-driven delete queue: each
+// buffer is move-captured (kept alive) until bgfx retires the frame its
+// readTexture was issued in, then freed — and drained at shutdown. Replaces the
+// old file-static orphan deque that leaked on shutdown and could mis-collect
+// across the uint32 frame-counter wraparound.
+void stashPendingReads(std::deque<PendingRead>& pending)
 {
-    if (pending.empty())
-        return;
-    std::lock_guard<std::mutex> lock(g_orphanedMutex);
     while (!pending.empty())
     {
-        g_orphanedReads.push_back(std::move(pending.front()));
+        PendingRead read = std::move(pending.front());
         pending.pop_front();
-    }
-}
-
-void releaseOrphanedReads(uint32_t frameId)
-{
-    if (frameId == std::numeric_limits<uint32_t>::max())
-        return;
-    std::lock_guard<std::mutex> lock(g_orphanedMutex);
-    while (!g_orphanedReads.empty() && g_orphanedReads.front().frameId <= frameId)
-    {
-        g_orphanedReads.pop_front();
+        const uint32_t safeFrame = read.frameId;
+        RenderDevice::instance().deferUntilFrameRetired(
+            [kept = std::move(read)]() {}, safeFrame);
     }
 }
 } // namespace
@@ -317,7 +308,8 @@ void RenderViewportRenderer::render()
     const uint32_t currentFrame = RenderDevice::instance().endFrame();
     m_lastFrameId = currentFrame;
 
-    releaseOrphanedReads(currentFrame);
+    // Orphaned readbacks are released by the device's deferred-delete queue,
+    // collected inside endFrame() above.
     processCompletedReadbacks();
 
     if (m_scene)
@@ -364,7 +356,7 @@ void RenderViewportRenderer::render()
 RenderViewportRenderer::~RenderViewportRenderer()
 {
     waitForPendingReadbacks();
-    stashOrphanedReads(m_pendingReads);
+    stashPendingReads(m_pendingReads);
     m_readyForRead.clear();
 
     if (m_runtimeInited)
@@ -431,7 +423,7 @@ bool RenderViewportRenderer::ensureSurface(const QSize& sz)
     if (m_surface.generation != 0 && m_surface.generation != currentGen)
     {
         waitForPendingReadbacks();
-        stashOrphanedReads(m_pendingReads);
+        stashPendingReads(m_pendingReads);
         RenderDevice::instance().destroySurface(m_surface);
         m_sceneInited = false;
         resetReadbackState();
@@ -456,7 +448,7 @@ bool RenderViewportRenderer::ensureSurface(const QSize& sz)
     else if (sizeChanged)
     {
         waitForPendingReadbacks();
-        stashOrphanedReads(m_pendingReads);
+        stashPendingReads(m_pendingReads);
         if (!RenderDevice::instance().resizeSurface(uint32_t(sz.width()), uint32_t(sz.height()), m_surface))
         {
             return false;
@@ -506,7 +498,7 @@ bool RenderViewportRenderer::ensureSurface(const QSize& sz)
 
 void RenderViewportRenderer::resetReadbackState()
 {
-    stashOrphanedReads(m_pendingReads);
+    stashPendingReads(m_pendingReads);
     m_readyForRead.clear();
     m_lastFrameId = std::numeric_limits<uint32_t>::max();
     m_frameIndex  = 0;

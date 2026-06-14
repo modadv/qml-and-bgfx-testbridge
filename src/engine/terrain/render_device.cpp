@@ -336,6 +336,8 @@ uint32_t RenderDevice::endFrame()
         return 0;
     const uint32_t frameId = bgfx::frame();
     m_lastFrameId.store(frameId);
+    // Run any cleanup whose target frame this bgfx frame has now retired.
+    m_deleteQueue.collect(frameId);
     return frameId;
 }
 
@@ -383,6 +385,10 @@ void RenderDevice::doShutdown()
 
     m_usedViewIds.clear();
     m_nextViewId = 0;
+
+    // Run all deferred cleanup before tearing down bgfx so any pending
+    // bgfx::destroy happens while the context is still valid.
+    m_deleteQueue.flushAll();
 
     bgfx::shutdown();
 

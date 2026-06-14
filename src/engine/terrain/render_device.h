@@ -1,13 +1,16 @@
 #pragma once
 
 #include "render_capabilities.h"
+#include "resource_arena.h"
 
 #include <bgfx/bgfx.h>
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <unordered_set>
+#include <utility>
 
 class RenderDevice
 {
@@ -48,6 +51,15 @@ public:
     uint8_t  readbackCount() const { return kReadbackBufferCount; }
     uint32_t lastFrameId() const { return m_lastFrameId.load(); }
 
+    // Schedule fn() to run once the GPU has retired frame safeAfterFrame (driven
+    // off bgfx's real frame fence in endFrame()) — or at shutdown, whichever
+    // comes first. Use it to keep a resource (CPU readback buffer, soon-to-be
+    // GpuHandle) alive until it is safe to free, instead of magic frame counters.
+    void deferUntilFrameRetired(std::function<void()> fn, uint32_t safeAfterFrame)
+    {
+        m_deleteQueue.enqueue(std::move(fn), safeAfterFrame);
+    }
+
     static const engine::RenderCaps& renderCaps();
 
 private:
@@ -77,4 +89,8 @@ private:
     uint8_t  m_nextViewId       = 0;
     std::unordered_set<uint8_t> m_usedViewIds;
     bgfx::PlatformData m_platformData{};
+
+    // Fence-driven deferred cleanup, collected each endFrame() and flushed at
+    // shutdown. Single owner of frame-gated destruction for the whole device.
+    engine::DeferredDeleteQueue m_deleteQueue;
 };
