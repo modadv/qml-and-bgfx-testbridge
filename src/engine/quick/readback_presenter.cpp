@@ -389,9 +389,12 @@ void ReadbackPresenter::waitForPendingReadbacks()
     if (!hasPending || m_lastFrameId == std::numeric_limits<uint32_t>::max())
         return;
 
+    // Upper bound on extra endFrame() pumps while draining in-flight readbacks
+    // on teardown, so a stuck fence can never spin forever.
+    constexpr int kMaxDrainFrames = 16;
     uint32_t current = m_lastFrameId;
     int guard = 0;
-    while (current < maxFrameId && guard < 16)
+    while (current < maxFrameId && guard < kMaxDrainFrames)
     {
         current = RenderDevice::instance().endFrame();
         ++guard;

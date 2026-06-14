@@ -145,7 +145,7 @@ void TerrainRenderer::loadDiffuseTexture() {
             BGFX_TEXTURE_NONE, mem
         );
 
-        deferDestroyTexture(m_textures[types::TEXTURE_DIFFUSE], 5);
+        deferDestroyTexture(m_textures[types::TEXTURE_DIFFUSE], kTextureRetireFrames);
 
         m_textures[types::TEXTURE_DIFFUSE] = newDiffuseTexture;
         m_diffuseUvMode = DiffuseUvMode::None;
@@ -174,7 +174,7 @@ void TerrainRenderer::loadDiffuseTexture() {
         );
     }
 
-    deferDestroyTexture(m_textures[types::TEXTURE_DIFFUSE], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_DIFFUSE], kTextureRetireFrames);
 
     m_textures[types::TEXTURE_DIFFUSE] = newDiffuseTexture;
 
@@ -252,9 +252,9 @@ void TerrainRenderer::clearHeightfield()
     m_rectMaxHeights.clear();
     m_diffuseUvMode = DiffuseUvMode::None;
 
-    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], kTextureRetireFrames);
     m_textures[types::TEXTURE_DMAP] = BGFX_INVALID_HANDLE;
-    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
     m_textures[types::TEXTURE_SMAP] = BGFX_INVALID_HANDLE;
 }
 
@@ -264,7 +264,7 @@ void TerrainRenderer::clearDiffuse()
     m_diffuseNeedReload = true;
     m_diffuseUvMode = DiffuseUvMode::None;
 
-    deferDestroyTexture(m_textures[types::TEXTURE_DIFFUSE], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_DIFFUSE], kTextureRetireFrames);
     m_textures[types::TEXTURE_DIFFUSE] = BGFX_INVALID_HANDLE;
 }
 
@@ -798,7 +798,7 @@ bool TerrainRenderer::dispatchGpuHeightfieldDecode(HeightfieldTextureLoader::Loa
     bgfx::destroy(minmaxIn);
     bgfx::destroy(rawTexture);
 
-    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], 60);
+    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], kDmapRetireFrames);
 
     const uint16_t prevWidth = m_heightfieldWidth;
     const uint16_t prevHeight = m_heightfieldHeight;
@@ -918,7 +918,7 @@ void TerrainRenderer::processAsyncUploads()
               task.width, task.height, uint32_t(task.data.size() * sizeof(uint16_t)));
     }
 
-    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], 60);
+    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], kDmapRetireFrames);
 
     m_textures[types::TEXTURE_DMAP] = newDmapTexture;
 
@@ -1003,7 +1003,7 @@ bool TerrainRenderer::tryLoadFromCache(const std::string& path)
     CachedTexture& cached = it->second;
     cached.lastAccessTime = std::chrono::steady_clock::now().time_since_epoch().count();
 
-    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], 60);
+    deferDestroyTexture(m_textures[types::TEXTURE_DMAP], kDmapRetireFrames);
 
     // Recreate GPU textures from CPU data; bgfx handles are never cached.
     auto* mem = bgfx::copy(cached.cpuData.data(), uint32_t(cached.cpuData.size() * sizeof(uint16_t)));

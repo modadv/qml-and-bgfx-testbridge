@@ -1431,39 +1431,3 @@ void TerrainRenderer::renderOverlayRects()
 
     bgfx::submit(m_viewId, m_programRectWire);
 }
-
-void TerrainRenderer::cpuRecomputeRectMaxIfNeeded()
-{
-    if (!m_rectComputeDirty || m_overlayRectsWorld.empty()
-        || m_dmapNormalizedCpu.empty()
-        || m_heightfieldWidth == 0 || m_heightfieldHeight == 0)
-    {
-        return;
-    }
-
-    const size_t rectCount = m_overlayRectsWorld.size();
-    std::vector<float> packed(rectCount * 8, 0.0f);
-    for (size_t i = 0; i < rectCount; ++i)
-    {
-        const OverlayQuad& q = m_overlayRectsWorld[i];
-        float* p = &packed[i * 8];
-        p[0] = q.x;  p[1] = q.y;  p[2] = q.ux; p[3] = q.uy;
-        p[4] = q.vx; p[5] = q.vy; p[6] = 0.0f; p[7] = 0.0f;
-    }
-
-    std::vector<float> heights;
-    engine::cpuComputeRectMax(packed.data(), int(rectCount),
-                              m_dmapNormalizedCpu.data(),
-                              int(m_heightfieldWidth), int(m_heightfieldHeight),
-                              m_terrainAspectRatio, 1.0f,
-                              currentRenderDmapFactor(),
-                              currentRenderDmapBias(),
-                              heights);
-
-    m_rectMaxHeights = heights;
-    m_rectMaxReadback = heights;
-    m_rectMaxReadCount = uint16_t(rectCount);
-    m_rectComputeDirty = false;
-    m_rectMaxReadRequested = false;
-    m_rectMaxReadPending = false;
-}

@@ -231,7 +231,7 @@ void TerrainRenderer::cpuRegenerateSmap()
                               m_heightfieldWidth, m_heightfieldHeight, mem);
     }
 
-    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
     m_textures[types::TEXTURE_SMAP] = newSmap;
     m_smapNeedsRegen = false;
     m_cpuSmapGenTime = 0.0f;

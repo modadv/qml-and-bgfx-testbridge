@@ -887,7 +887,7 @@ void TerrainRenderer::loadSmapTexture() {
         BGFX_TEXTURE_NONE, mem
     );
 
-    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
 
     m_textures[types::TEXTURE_SMAP] = newSmapTexture;
 
@@ -912,7 +912,7 @@ void TerrainRenderer::loadSmapTextureGPU() {
             BGFX_TEXTURE_NONE, mem
         );
 
-        deferDestroyTexture(m_textures[types::TEXTURE_SMAP], 5);
+        deferDestroyTexture(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
 
         m_textures[types::TEXTURE_SMAP] = newSmapTexture;
         m_gpuSmapGenTime = 0.0f;
@@ -970,11 +970,11 @@ void TerrainRenderer::loadSmapTextureGPU() {
     const uint8_t viewId = m_viewId;
     bgfx::dispatch(viewId, m_programsCompute[types::PROGRAM_GENERATE_SMAP], groupsX, groupsY, 1);
 
-    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], 5);
+    deferDestroyTexture(m_textures[types::TEXTURE_SMAP], kTextureRetireFrames);
 
     m_textures[types::TEXTURE_SMAP] = newSmapTexture;
 
-    m_deferSmapUseFrames = 3;
+    m_deferSmapUseFrames = kSmapUseDeferFrames;
 
     int64_t endTime = bx::getHPCounter();
     m_gpuSmapGenTime = float((endTime - startTime) / double(bx::getHPFrequency()) * 1000.0);

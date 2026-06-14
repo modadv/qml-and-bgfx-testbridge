@@ -331,6 +331,22 @@ public:
     bool ensureValidResources();
 
     void destroyAllResources();
+
+    // Frame budgets handed to deferDestroyTexture (the safe-after-frame offset on
+    // RenderDevice's deferred-delete queue). Named so the two distinct retirement
+    // policies are explicit rather than scattered literals.
+    //   - kTextureRetireFrames: swap-in-place textures (smap, diffuse) whose only
+    //     in-flight reader is the draw that just sampled the old handle.
+    //   - kDmapRetireFrames: the dmap, which can additionally be referenced by an
+    //     in-flight async heightfield decode/readback, so it must live longer.
+    static constexpr uint32_t kTextureRetireFrames = 5;
+    static constexpr uint32_t kDmapRetireFrames    = 60;
+    // Frames to keep sampling the previous smap after queuing a fresh GPU smap,
+    // so the generate-smap compute dispatch retires before the terrain draw reads
+    // its output. This is a *use* deferral (not a delete deferral), so it is not
+    // subsumed by the deferred-delete queue.
+    static constexpr int kSmapUseDeferFrames = 3;
+
     // Schedule the old texture handle for destruction once the GPU has retired
     // `framesToKeepOld` more frames (routed through RenderDevice's deferred-delete
     // queue). Replaces the old backup-array + shared-frame-counter mechanism.
@@ -454,7 +470,6 @@ public:
     void loadSimpleGridBuffers();
     void renderTerrainSimple();
     void cpuRegenerateSmap();
-    void cpuRecomputeRectMaxIfNeeded();
     std::vector<float> m_dmapNormalizedCpu; // width*height floats in [0,1] for CPU dmap path
     bgfx::VertexBufferHandle m_rectWireVertices = BGFX_INVALID_HANDLE;
     bgfx::IndexBufferHandle m_rectWireIndices = BGFX_INVALID_HANDLE;
