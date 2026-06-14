@@ -9,6 +9,7 @@
 #include "heightfield_asset.h"
 #include "performance_monitor.h"
 #include "render_capabilities.h"
+#include "frame_graph.h"
 #include <bimg/decode.h>
 #include <bgfx/bgfx.h>
 #include <bx/math.h>
@@ -25,6 +26,54 @@
 #include <fstream>
 #include <deque>
 #include <mutex>
+
+namespace {
+
+// Canonical, tier-specific render-pass topology for the terrain pipeline. This
+// declares the fixed ordered passes and each pass's read/write set so the
+// ordering can be validated (producer-before-consumer) and introspected via the
+// render.resources snapshot. It mirrors the sequence in update(); it is a
+// *description*, not a scheduler — it does not drive bgfx submission.
+//
+// Resource flow (both tiers): a decode/upload pass produces Dmap; smap is
+// produced from Dmap; the overlay-max pass produces OverlayMax from Dmap; the
+// terrain pass consumes Dmap+Smap+Diffuse and writes the color/depth target;
+// axes and overlay-rects draw into the same target (overlay-rects consumes
+// OverlayMax); the present pass blits the color target out for readback.
+// Diffuse and the raw Heightfield are external inputs (loaded from disk, never
+// written by a pass) and so are exempt from ordering validation.
+engine::FramePassList buildTerrainFramePasses(bool noCompute, int renderViewId)
+{
+    using R = engine::PassResource;
+    engine::FramePassList passes;
+    if (noCompute)
+    {
+        passes
+            .add("heightfield-upload", -1, uint32_t(R::Heightfield), uint32_t(R::Dmap))
+            .add("smap-cpu",           -1, uint32_t(R::Dmap),        uint32_t(R::Smap))
+            .add("overlay-max-cpu",    -1, uint32_t(R::Dmap),        uint32_t(R::OverlayMax))
+            .add("terrain-simple", renderViewId, R::Dmap | R::Smap | R::Diffuse,
+                 R::ColorTarget | R::DepthTarget)
+            .add("axes",           renderViewId, 0u, R::ColorTarget | R::DepthTarget)
+            .add("overlay-rects",  renderViewId, uint32_t(R::OverlayMax), uint32_t(R::ColorTarget))
+            .add("present-blit",   -1, uint32_t(R::ColorTarget), 0u);
+    }
+    else
+    {
+        passes
+            .add("heightfield-decode", -1, uint32_t(R::Heightfield), uint32_t(R::Dmap))
+            .add("smap-generate",      -1, uint32_t(R::Dmap),        uint32_t(R::Smap))
+            .add("overlay-max",        -1, uint32_t(R::Dmap),        uint32_t(R::OverlayMax))
+            .add("terrain",      renderViewId, R::Dmap | R::Smap | R::Diffuse,
+                 R::ColorTarget | R::DepthTarget)
+            .add("axes",         renderViewId, 0u, R::ColorTarget | R::DepthTarget)
+            .add("overlay-rects",renderViewId, uint32_t(R::OverlayMax), uint32_t(R::ColorTarget))
+            .add("present-blit", -1, uint32_t(R::ColorTarget), 0u);
+    }
+    return passes;
+}
+
+} // namespace
 
 TerrainRenderer::TerrainRenderer()
     : m_dmap(nullptr)
@@ -139,6 +188,19 @@ bool TerrainRenderer::init(uint32_t width, uint32_t height)
         else
         {
             m_dispatchIndirect = bgfx::createIndirectBuffer(2);
+        }
+
+        // Validate the declarative frame-pass ordering once at init. The
+        // topology is static per tier, so an invalid result here would be a
+        // programming error in the pass declaration above, not a runtime/data
+        // condition — surface it loudly rather than silently.
+        {
+            std::string fgErr;
+            if (!buildTerrainFramePasses(RenderDevice::renderCaps().noCompute(),
+                                         int(m_viewId)).validate(fgErr))
+            {
+                LOG_E("[TerrainRenderer] frame-pass validation failed: {}", fgErr.c_str());
+            }
         }
 
         m_resourcesValid = true;
@@ -1379,6 +1441,8 @@ nlohmann::json TerrainRenderer::resourcesSnapshot() const
         {"overlayRectsWorld", m_overlayRectsWorld.size()},
         {"overlayUseScreenSpace", m_overlayUseScreenSpace},
         {"overlayMaxReady", overlayMaxReady()},
+        {"framePasses", buildTerrainFramePasses(RenderDevice::renderCaps().noCompute(),
+                                                int(m_viewId)).toJson()},
         {"loadHistory", loadHistory}
     };
 }
