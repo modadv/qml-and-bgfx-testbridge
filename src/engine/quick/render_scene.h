@@ -2,6 +2,7 @@
 #pragma once
 
 #include "terrain/terrain_renderer.h"
+#include "render_content.h"
 #include "config/config.h"
 #include <nlohmann/json.hpp>
 #include <functional>
@@ -14,14 +15,14 @@
 #include <QString>
 #include <QWheelEvent>
 
-class RenderScene
+class RenderScene : public IRenderContent
 {
 public:
     RenderScene();
-    ~RenderScene() = default;
+    ~RenderScene() override = default;
 
-    void resize(uint32_t w, uint32_t h);
-    void update(float dt);
+    void resize(uint32_t w, uint32_t h) override;
+    void update(float dt) override;
     void loadHeightfield(const QString& path);
     void loadDiffuse(const QString& path);
     void clearHeightfield();
@@ -31,7 +32,7 @@ public:
     void setFreeze(bool on);
     void setGpuSubdivision(int lvl);
     void reloadTextures();
-    void setRenderTarget(bgfx::ViewId viewId, bgfx::FrameBufferHandle framebuffer);
+    void setRenderTarget(bgfx::ViewId viewId, bgfx::FrameBufferHandle framebuffer) override;
     void setOverlayRects(const std::vector<OverlayRect>& rects);
     void clearOverlayRects();
     void setOverlayUseScreenSpace(bool enabled);
@@ -55,7 +56,7 @@ public:
     bool hasOverlayRects() const;
     // Whether the scene still needs to drive frames on its own (animation /
     // settling). False lets the viewport render on-demand instead of spinning.
-    bool needsContinuousUpdate() const
+    bool needsContinuousUpdate() const override
     {
         // Keep driving frames while the terrain is still settling (load/SMap/
         // compute refinement), while an auto-fit is pending (it only resolves

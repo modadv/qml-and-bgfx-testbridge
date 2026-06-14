@@ -1,6 +1,6 @@
 #pragma once
 #include "render_scene.h"
-#include "terrain/render_device.h"
+#include "readback_presenter.h"
 
 #include <QQuickFramebufferObject>
 #include <QUrl>
@@ -9,26 +9,7 @@
 #include <QVariant>
 #include <QPointF>
 #include <QString>
-#include <array>
 #include <vector>
-
-struct BlitRecord
-{
-    bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
-    uint64_t frameIndex = 0;
-    int width = 0;
-    int height = 0;
-    uint8_t texIndex = 0;
-};
-
-struct PendingRead
-{
-    uint32_t frameId = std::numeric_limits<uint32_t>::max();
-    int width = 0;
-    int height = 0;
-    QByteArray pixels;
-    uint8_t texIndex = 0;
-};
 
 
 class RenderViewportItem : public QQuickFramebufferObject
@@ -127,15 +108,8 @@ public:
     void synchronize(QQuickFramebufferObject* qitem) override;
     void render() override;
     ~RenderViewportRenderer() override;
-    bool ensureSurface(const QSize& sz);
-    void resetReadbackState();
 
 private:
-    QSize m_lastSize;
-
-    void processCompletedReadbacks();
-    void scheduleReadbacksFromQueue();
-    void waitForPendingReadbacks();
     // Render-on-demand gate: keep self-scheduling frames only while the scene is
     // animating, a pick is pending, or readbacks are still draining. Otherwise
     // the loop idles until the next input/data change calls update().
@@ -144,25 +118,17 @@ private:
     RenderViewportItem*  m_item        = nullptr;
     RenderScene* m_scene       = nullptr;
 
-    bool m_runtimeInited = false;
-    bool m_sceneInited   = false;
-    RenderDevice::ViewSurface m_surface;
+    // Owns the offscreen surface + GPU->CPU readback ring + FBO upload (the
+    // reusable present path); the renderer just drives content through it.
+    ReadbackPresenter m_presenter;
 
     QElapsedTimer m_timer;
-    uint64_t      m_frameIndex   = 0;
 
     // Render-on-demand settle margin: frames still to render after the scene last
     // reported needsContinuousUpdate()==true, so content + the async readback
     // pipeline fully drain to the FBO before the loop idles. Reset while the scene
     // animates/settles, counted down otherwise.
-    int           m_idleSettleFrames = 0;
-
-    uint32_t m_lastFrameId = std::numeric_limits<uint32_t>::max();
-
-    std::deque<BlitRecord>  m_readyForRead;
-    std::deque<PendingRead> m_pendingReads;
-    std::array<bool, RenderDevice::kReadbackBufferCount> m_readbackInUse{};
-    uint8_t m_nextReadbackIndex = 0;
+    int m_idleSettleFrames = 0;
 
     bool m_pickPending = false;
     QPointF m_pickPos;

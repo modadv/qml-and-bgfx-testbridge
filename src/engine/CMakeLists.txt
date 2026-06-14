@@ -193,6 +193,7 @@ add_library(engine_core STATIC
     terrain/terrain_uniforms.cpp
     quick/render_viewport_item.cpp
     quick/render_scene.cpp
+    quick/readback_presenter.cpp
     quick/asset_fetch_service.cpp
 )
 
