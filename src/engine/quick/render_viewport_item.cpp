@@ -206,6 +206,26 @@ void RenderViewportRenderer::synchronize(QQuickFramebufferObject* qitem)
     }
 }
 
+bool RenderViewportRenderer::shouldContinueRendering() const
+{
+    // Scene is animating or still settling -> keep driving frames.
+    if (m_scene && m_scene->needsContinuousUpdate())
+        return true;
+    // Settle margin after the last animating frame still owes us frames.
+    if (m_idleSettleFrames > 0)
+        return true;
+    // A pick is awaiting an async overlay-max readback to resolve.
+    if (m_pickPending)
+        return true;
+    // Readbacks are still in flight; keep pumping until the FBO is up to date.
+    if (!m_pendingReads.empty() || !m_readyForRead.empty())
+        return true;
+    for (bool inUse : m_readbackInUse)
+        if (inUse)
+            return true;
+    return false;
+}
+
 void RenderViewportRenderer::render()
 {
     if (!m_scene)
@@ -245,6 +265,15 @@ void RenderViewportRenderer::render()
     const float dt = float(m_timer.restart()) / 1000.0f;
     m_scene->update(dt);
 
+    // Render-on-demand: keep a settle margin of frames after the scene last needed
+    // continuous updates, so multi-frame content settling (decode/SMap) and the
+    // 2-3 frame async readback fully reach the FBO before the loop idles.
+    static const int kIdleSettleFrames = 20;
+    if (m_scene->needsContinuousUpdate())
+        m_idleSettleFrames = kIdleSettleFrames;
+    else if (m_idleSettleFrames > 0)
+        --m_idleSettleFrames;
+
     const uint8_t readbackCount = RenderDevice::instance().readbackCount();
     bool readbackInFlight = !m_pendingReads.empty() || !m_readyForRead.empty();
     if (!readbackInFlight)
@@ -269,7 +298,8 @@ void RenderViewportRenderer::render()
             m_scene->processOverlayMaxReadback(currentFrame);
         }
         ++m_frameIndex;
-        update();
+        if (shouldContinueRendering())
+            update();
         finishExternal();
         return;
     }
@@ -349,7 +379,8 @@ void RenderViewportRenderer::render()
     }
 
     ++m_frameIndex;
-    update();
+    if (shouldContinueRendering())
+        update();
     finishExternal();
 }
 

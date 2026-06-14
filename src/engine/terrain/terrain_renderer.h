@@ -254,6 +254,13 @@ public:
     void setCulling(bool enabled) { m_cull = enabled; }
     void setFreeze(bool enabled) { m_freeze = enabled; }
     void setPrimitivePixelLength(float length) { m_primitivePixelLengthTarget = length; }
+
+    // True while the terrain must keep producing frames on its own: the Full
+    // (compute) tier continuously refines GPU subdivision unless frozen, and any
+    // tier needs more frames while a load is still settling. The NoCompute simple
+    // grid is static once loaded, so this returns false and lets the viewport go
+    // idle until the next input/data change. Drives render-on-demand.
+    bool needsContinuousUpdate() const;
     void setShading(int shading) { m_shading = shading; }
     void setGpuSubdivision(int level);
 

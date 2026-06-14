@@ -53,6 +53,20 @@ public:
     bool processOverlayMaxReadback(uint32_t frameId);
     bool overlayMaxReady() const;
     bool hasOverlayRects() const;
+    // Whether the scene still needs to drive frames on its own (animation /
+    // settling). False lets the viewport render on-demand instead of spinning.
+    bool needsContinuousUpdate() const
+    {
+        // Keep driving frames while the terrain is still settling (load/SMap/
+        // compute refinement), while an auto-fit is pending (it only resolves
+        // once the heightfield is ready, which may take several frames), or
+        // while the camera view has not yet been rendered (e.g. the frame after
+        // auto-fit changes the distance). Otherwise the static NoCompute grid
+        // would freeze the very first, pre-auto-fit frame and idle on it.
+        return m_renderer.needsContinuousUpdate()
+            || m_autoFitPending
+            || m_camera.viewDirty();
+    }
     nlohmann::json performanceSnapshot() const { return m_renderer.performanceSnapshot(); }
     nlohmann::json resourcesSnapshot() const
     {
@@ -128,6 +142,11 @@ private:
 
         const float* viewData() const { return m_view.constData(); }
         const float* projData() const { return m_proj.constData(); }
+
+        // True while a camera change (orbit/pan/zoom/auto-fit) has not yet been
+        // baked into the matrices. Drives render-on-demand so the loop keeps
+        // producing frames until the new view has actually been rendered.
+        bool viewDirty() const { return m_viewDirty || m_projDirty; }
 
         nlohmann::json exportConfig() const;
         void loadConfig(const nlohmann::json& config);

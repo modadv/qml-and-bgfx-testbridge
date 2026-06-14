@@ -136,6 +136,10 @@ private:
     void processCompletedReadbacks();
     void scheduleReadbacksFromQueue();
     void waitForPendingReadbacks();
+    // Render-on-demand gate: keep self-scheduling frames only while the scene is
+    // animating, a pick is pending, or readbacks are still draining. Otherwise
+    // the loop idles until the next input/data change calls update().
+    bool shouldContinueRendering() const;
 
     RenderViewportItem*  m_item        = nullptr;
     RenderScene* m_scene       = nullptr;
@@ -146,6 +150,12 @@ private:
 
     QElapsedTimer m_timer;
     uint64_t      m_frameIndex   = 0;
+
+    // Render-on-demand settle margin: frames still to render after the scene last
+    // reported needsContinuousUpdate()==true, so content + the async readback
+    // pipeline fully drain to the FBO before the loop idles. Reset while the scene
+    // animates/settles, counted down otherwise.
+    int           m_idleSettleFrames = 0;
 
     uint32_t m_lastFrameId = std::numeric_limits<uint32_t>::max();
 

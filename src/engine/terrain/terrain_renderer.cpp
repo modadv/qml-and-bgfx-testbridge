@@ -550,6 +550,20 @@ void TerrainRenderer::deferDestroyTexture(bgfx::TextureHandle handle, uint32_t f
         safeFrame);
 }
 
+bool TerrainRenderer::needsContinuousUpdate() const
+{
+    // Full (compute) tier continuously refines GPU subdivision each frame unless
+    // frozen — it needs to keep rendering. The NoCompute simple grid is static.
+    if (!RenderDevice::renderCaps().noCompute() && !m_freeze)
+        return true;
+    // Any tier needs more frames while a load is still settling (first frame,
+    // a pending texture reload, or a GPU SMap result not yet usable).
+    return m_heightfieldNeedReload
+        || m_diffuseNeedReload
+        || !m_firstFrameRendered
+        || m_deferSmapUseFrames > 0;
+}
+
 void TerrainRenderer::invalidateAllHandles()
 {
     m_uniforms.invalidate();
