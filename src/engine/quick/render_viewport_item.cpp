@@ -224,7 +224,12 @@ void RenderViewportRenderer::render()
     else if (m_idleSettleFrames > 0)
         --m_idleSettleFrames;
 
-    if (m_presenter.hasInFlightReadbacks())
+    // Only stall when the readback ring is actually full. Gating on "any readback
+    // in flight" serialised the ring to depth 1: one blit, then two drain frames
+    // waiting for it to land, so content reached the FBO at a third of the loop
+    // rate. With a free slot we render and blit this frame and let the earlier
+    // readbacks retire in parallel.
+    if (!m_presenter.hasFreeReadbackSlot())
     {
         const uint32_t currentFrame = m_presenter.endFrame();
         m_presenter.processCompletedReadbacks(fbo);
@@ -237,7 +242,6 @@ void RenderViewportRenderer::render()
     }
 
     m_presenter.blitForReadback(sz);
-
     const uint32_t currentFrame = m_presenter.endFrame();
 
     // Orphaned readbacks are released by the device's deferred-delete queue,
@@ -581,6 +585,7 @@ void RenderViewportItem::mousePressEvent(QMouseEvent* event)
     if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton)
     {
         m_scene.handleMousePress(event);
+        update();
         event->accept();
         return;
     }
@@ -615,6 +620,10 @@ void RenderViewportItem::mouseMoveEvent(QMouseEvent* event)
         if (m_leftDragging)
         {
             m_scene.handleMouseMove(event);
+            // The camera moved: request a frame. needsContinuousUpdate() cannot
+            // carry this on its own, because render() bakes the view (clearing
+            // Camera::viewDirty) before it evaluates the render-on-demand check.
+            update();
             event->accept();
             return;
         }
@@ -623,6 +632,7 @@ void RenderViewportItem::mouseMoveEvent(QMouseEvent* event)
     if (event->buttons() & Qt::MiddleButton || event->buttons() & Qt::RightButton)
     {
         m_scene.handleMouseMove(event);
+        update();
         event->accept();
         return;
     }
@@ -665,6 +675,7 @@ void RenderViewportItem::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton)
     {
         m_scene.handleMouseRelease(event);
+        update();
         event->accept();
         return;
     }
@@ -675,5 +686,6 @@ void RenderViewportItem::mouseReleaseEvent(QMouseEvent* event)
 void RenderViewportItem::wheelEvent(QWheelEvent* event)
 {
     m_scene.handleWheel(event);
+    update();
     emit wheelZoomed(event->angleDelta().y());
 }

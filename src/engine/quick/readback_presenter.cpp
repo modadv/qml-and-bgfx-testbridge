@@ -18,8 +18,10 @@
 #endif
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <utility>
+#include <vector>
 
 namespace {
 // Hand in-flight readbacks to the device's fence-driven delete queue: each
@@ -48,14 +50,20 @@ void flipImageVertical(QByteArray& data, int width, int height)
     if (data.size() < rowBytes * height)
         return;
 
+    // Swap whole rows through a scratch buffer: three memcpy per row pair rather
+    // than rowBytes scalar swaps (~1.5M byte swaps per frame at 1142x666), which
+    // ran on the render thread for every presented frame.
+    static thread_local std::vector<char> rowBuf;
+    rowBuf.resize(size_t(rowBytes));
+
+    char* const base = data.data();
     for (int y = 0; y < height / 2; ++y)
     {
-        char* top = data.data() + y * rowBytes;
-        char* bottom = data.data() + (height - 1 - y) * rowBytes;
-        for (int x = 0; x < rowBytes; ++x)
-        {
-            std::swap(top[x], bottom[x]);
-        }
+        char* top    = base + y * rowBytes;
+        char* bottom = base + (height - 1 - y) * rowBytes;
+        std::memcpy(rowBuf.data(), top, size_t(rowBytes));
+        std::memcpy(top, bottom, size_t(rowBytes));
+        std::memcpy(bottom, rowBuf.data(), size_t(rowBytes));
     }
 }
 } // namespace
@@ -223,6 +231,13 @@ void ReadbackPresenter::processCompletedReadbacks(QOpenGLFramebufferObject* fbo)
     const bgfx::Caps* caps = bgfx::getCaps();
     const bool needFlip = (caps && !caps->originBottomLeft);
 
+    // Retire every readback whose frame has landed, but upload only the freshest
+    // of them. With a pipelined ring more than one can complete in the same frame
+    // (e.g. after a hitch); flipping and uploading the stale ones would each cost
+    // a full-surface flip + glTexSubImage2D only to be overwritten immediately.
+    PendingRead newest;
+    bool haveNewest = false;
+
     while (!m_pendingReads.empty() && m_pendingReads.front().frameId <= m_lastFrameId)
     {
         PendingRead ready = std::move(m_pendingReads.front());
@@ -249,24 +264,33 @@ void ReadbackPresenter::processCompletedReadbacks(QOpenGLFramebufferObject* fbo)
             continue;
         }
 
-        if (needFlip)
-        {
-            flipImageVertical(ready.pixels, ready.width, ready.height);
-        }
-
-        gl->glBindTexture(GL_TEXTURE_2D, targetTexture);
-        gl->glTexSubImage2D(
-            GL_TEXTURE_2D,
-            0,
-            0,
-            0,
-            ready.width,
-            ready.height,
-            GL_RGBA,
-            GL_UNSIGNED_BYTE,
-            ready.pixels.constData()
-        );
+        // m_pendingReads is FIFO by frameId, so the last one kept is the newest.
+        newest = std::move(ready);
+        haveNewest = true;
     }
+
+    if (!haveNewest)
+    {
+        return;
+    }
+
+    if (needFlip)
+    {
+        flipImageVertical(newest.pixels, newest.width, newest.height);
+    }
+
+    gl->glBindTexture(GL_TEXTURE_2D, targetTexture);
+    gl->glTexSubImage2D(
+        GL_TEXTURE_2D,
+        0,
+        0,
+        0,
+        newest.width,
+        newest.height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        newest.pixels.constData()
+    );
 }
 
 void ReadbackPresenter::scheduleReadbacksFromQueue()
@@ -370,6 +394,14 @@ bool ReadbackPresenter::hasInFlightReadbacks() const
         return true;
     for (bool inUse : m_readbackInUse)
         if (inUse)
+            return true;
+    return false;
+}
+
+bool ReadbackPresenter::hasFreeReadbackSlot() const
+{
+    for (bool inUse : m_readbackInUse)
+        if (!inUse)
             return true;
     return false;
 }

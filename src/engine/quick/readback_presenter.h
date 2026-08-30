@@ -71,6 +71,13 @@ public:
     // True while any blit/readback slot is still occupied.
     bool hasInFlightReadbacks() const;
 
+    // True while at least one readback slot is free, i.e. a new frame can be
+    // blitted right now without waiting for earlier readbacks to land. Gating on
+    // this instead of hasInFlightReadbacks() lets the ring actually pipeline:
+    // content is produced every frame and each readback retires a few frames
+    // later, instead of one readback at a time serialising the whole loop.
+    bool hasFreeReadbackSlot() const;
+
     uint64_t frameIndex() const { return m_frameIndex; }
     void bumpFrameIndex() { ++m_frameIndex; }
     uint32_t lastFrameId() const { return m_lastFrameId; }

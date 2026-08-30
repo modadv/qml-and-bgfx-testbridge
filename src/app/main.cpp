@@ -525,11 +525,13 @@ private:
 
     static QString direct3DProfile(const QString& shaderType)
     {
-        if (shaderType == QStringLiteral("vertex"))
-            return QStringLiteral("vs_5_0");
-        if (shaderType == QStringLiteral("compute"))
-            return QStringLiteral("cs_5_0");
-        return QStringLiteral("ps_5_0");
+        // shaderc derives the stage letter from --type and prepends it itself, so
+        // the profile must be passed *without* one: "s_5_0" becomes vs_5_0/ps_5_0/
+        // cs_5_0. Passing an already-prefixed "vs_5_0" yielded "vvs_5_0" and
+        // D3DCompile error X3506 (unrecognized compiler target). This matches the
+        // offline build, which passes s_5_0 for dx11 (src/engine/CMakeLists.txt).
+        Q_UNUSED(shaderType);
+        return QStringLiteral("s_5_0");
     }
 
     static void rendererTarget(const QString& shaderType,
@@ -577,7 +579,7 @@ private:
             default:
                 rendererDir = "dx11";
                 platform = "windows";
-                profile = "ps_5_0";
+                profile = direct3DProfile(shaderType);
                 return;
         }
     }

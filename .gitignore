@@ -5,6 +5,7 @@
 .install-testbridge/
 build/
 out/
+dist/
 
 # Conan/CMake generated files
 CMakeUserPresets.json
